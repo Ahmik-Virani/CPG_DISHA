@@ -61,18 +61,6 @@ function resolveMongoUri() {
   }
 
   let uri = MONGODB_CONNECTION_STRING;
-
-  if (MONGODB_USER_ID) {
-    uri = uri.replace(/<username>|\{\{username\}\}|__MONGODB_USER__/gi, encodeURIComponent(MONGODB_USER_ID));
-  }
-
-  if (MONGODB_PWD) {
-    uri = uri.replace(
-      /<password>|<db_password>|\{\{password\}\}|__MONGODB_PWD__/gi,
-      encodeURIComponent(MONGODB_PWD)
-    );
-  }
-
   return uri;
 }
 
