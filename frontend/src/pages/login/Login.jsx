@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Building, Shield, User } from "lucide-react";
-import { useAuth } from "../context/AuthContext";
-import { getRoleHomePath } from "../auth/roleHome";
+import { Shield, User } from "lucide-react";
+import { useAuth } from "../../context/AuthContext";
+import { getRoleHomePath } from "../../auth/roleHome";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -10,7 +10,7 @@ export default function Login() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [selectedRole, setSelectedRole] = useState("any");
+  const [selectedRole, setSelectedRole] = useState("user");
   const [error, setError] = useState("");
 
   const onSubmit = async (e) => {
@@ -20,9 +20,9 @@ export default function Login() {
     try {
       const user = await login(email, password);
 
-      if (selectedRole !== "any" && user.role !== selectedRole) {
+      if (user.role !== selectedRole) {
         logout();
-        setError(`This account is a ${user.role}. Please choose the correct role.`);
+        setError(`This account is not a ${selectedRole}. Please select the correct role.`);
         return;
       }
 
@@ -45,52 +45,30 @@ export default function Login() {
         <p className="text-center text-gray-500 mb-6">Sign in to your account</p>
 
         <form onSubmit={onSubmit} className="space-y-3">
-          <div className="grid grid-cols-2 gap-2 bg-gray-100 rounded-xl p-2">
+          <div className="flex bg-gray-100 rounded-xl p-1">
             <button
               type="button"
-              className={`py-2 rounded-lg text-sm flex items-center justify-center gap-2 ${
-                selectedRole === "system_admin" ? "bg-white" : ""
-              }`}
-              onClick={() => setSelectedRole("system_admin")}
-            >
-              <Shield size={15} /> System Admin
-            </button>
-            <button
-              type="button"
-              className={`py-2 rounded-lg text-sm flex items-center justify-center gap-2 ${
-                selectedRole === "admin" ? "bg-white" : ""
-              }`}
-              onClick={() => setSelectedRole("admin")}
-            >
-              <Shield size={15} /> Admin
-            </button>
-            <button
-              type="button"
-              className={`py-2 rounded-lg text-sm flex items-center justify-center gap-2 ${
-                selectedRole === "merchant" ? "bg-white" : ""
-              }`}
-              onClick={() => setSelectedRole("merchant")}
-            >
-              <Building size={15} /> Merchant
-            </button>
-            <button
-              type="button"
-              className={`py-2 rounded-lg text-sm flex items-center justify-center gap-2 ${
-                selectedRole === "user" ? "bg-white" : ""
+              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${
+                selectedRole === "user"
+                  ? "bg-white shadow text-black"
+                  : "text-gray-500 hover:text-black"
               }`}
               onClick={() => setSelectedRole("user")}
             >
-              <User size={15} /> User
+              <User size={16} /> User
+            </button>
+            <button
+              type="button"
+              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${
+                selectedRole === "admin"
+                  ? "bg-white shadow text-black"
+                  : "text-gray-500 hover:text-black"
+              }`}
+              onClick={() => setSelectedRole("admin")}
+            >
+              <Shield size={16} /> Admin
             </button>
           </div>
-
-          <button
-            type="button"
-            className={`w-full border py-2 rounded-lg text-sm ${selectedRole === "any" ? "bg-gray-100" : ""}`}
-            onClick={() => setSelectedRole("any")}
-          >
-            Role: Any (auto-detect)
-          </button>
 
           <input
             className="w-full border p-2 rounded"
@@ -102,7 +80,7 @@ export default function Login() {
           <input
             type="password"
             className="w-full border p-2 rounded"
-            placeholder="password"
+            placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
@@ -114,9 +92,11 @@ export default function Login() {
           </button>
         </form>
 
-        <p className="text-sm text-center mt-4 text-gray-600">
-          New user? <Link to="/signup" className="text-blue-600">Create account</Link>
-        </p>
+        {selectedRole === "user" && (
+          <p className="text-sm text-center mt-4 text-gray-600">
+            New user? <Link to="/signup" className="text-blue-600">Create account</Link>
+          </p>
+        )}
       </div>
     </div>
   );

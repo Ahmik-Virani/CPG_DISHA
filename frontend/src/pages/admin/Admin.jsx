@@ -47,9 +47,6 @@ export default function Admin() {
 
         <div className="flex items-center gap-3">
           <Link to="/change-password" className="border px-4 py-2 rounded-lg">Change Password</Link>
-          {user?.role === "system_admin" ? (
-            <Link to="/system-admin" className="border px-4 py-2 rounded-lg">System Admin</Link>
-          ) : null}
           <button
             onClick={() => {
               logout();
@@ -91,15 +88,14 @@ export default function Admin() {
             <div className="flex justify-between items-center mb-6">
               <div>
                 <h2 className="text-2xl font-semibold">Manage Merchants</h2>
-                <p className="text-gray-500">Add, remove or edit campus merchants</p>
               </div>
 
-              <button
+              {/* <button
                 onClick={() => navigate("/admin/addMerchant")}
                 className="bg-black text-white px-4 py-2 rounded-lg flex items-center gap-2 cursor-pointer"
               >
                 <Plus size={16} /> Add Merchant
-              </button>
+              </button> */}
             </div>
 
             <div className="flex items-center bg-white border rounded-lg px-3 py-2 w-[350px] mb-8">

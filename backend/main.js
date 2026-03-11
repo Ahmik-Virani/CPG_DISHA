@@ -23,7 +23,7 @@ const MONGODB_USER_ID = String(
 ).trim();
 const MONGODB_PWD = String(process.env.MONGODB_PWD || "").trim();
 const MONGODB_DB_NAME = String(process.env.MONGODB_DB_NAME || "cpg_disha").trim();
-const ROLES = ["system_admin", "admin", "merchant", "user"];
+const ROLES = ["admin", "user"];
 const SALT_ROUNDS = 10;
 
 let usersCollection;
@@ -33,10 +33,6 @@ app.use(cors());
 app.use(express.json());
 
 const normalizeEmail = (email) => String(email || "").trim().toLowerCase();
-
-function randomPassword() {
-  return crypto.randomBytes(6).toString("base64url");
-}
 
 function stripPassword(user) {
   const { _id, passwordHash, ...safeUser } = user;
@@ -51,7 +47,7 @@ function signToken(user) {
       email: user.email,
     },
     JWT_SECRET,
-    { expiresIn: "8h" }
+    { expiresIn: "1h" }
   );
 }
 
@@ -128,18 +124,18 @@ function requireRole(...allowedRoles) {
   };
 }
 
-async function bootstrapSystemAdmin() {
-  const email = normalizeEmail(process.env.SYS_ADMIN_EMAIL || "systemadmin@iith.ac.in");
-  const password = String(process.env.SYS_ADMIN_PASSWORD || "ChangeMe@123");
+async function bootstrapAdmin() {
+  const email = normalizeEmail(process.env.ADMIN_EMAIL || "admin@iith.ac.in");
+  const password = String(process.env.ADMIN_PASSWORD || "ChangeMe@123");
 
-  const already = await getUsersCollection().findOne({ role: "system_admin" });
+  const already = await getUsersCollection().findOne({ role: "admin" });
   if (already) return;
 
   const user = {
     id: crypto.randomUUID(),
-    name: "System Admin",
+    name: "Admin",
     email,
-    role: "system_admin",
+    role: "admin",
     passwordHash: await bcrypt.hash(password, SALT_ROUNDS),
     mustChangePassword: true,
     authProvider: "local",
@@ -149,7 +145,7 @@ async function bootstrapSystemAdmin() {
   };
 
   await createUserRecord(user);
-  console.log(`Bootstrapped system admin: ${email}`);
+  console.log(`Bootstrapped admin: ${email}`);
 }
 
 app.get("/health", async (_req, res) => {
@@ -269,88 +265,7 @@ app.get("/auth/me", requireAuth, async (req, res) => {
   return res.json({ user: stripPassword(user) });
 });
 
-app.post("/auth/system-admin/create-user", requireAuth, requireRole("system_admin"), async (req, res) => {
-  const name = String(req.body?.name || "").trim();
-  const email = normalizeEmail(req.body?.email);
-  const role = String(req.body?.role || "user");
-  const suppliedPassword = String(req.body?.password || "").trim();
 
-  if (!name || !email) {
-    return res.status(400).json({ message: "Name and email are required" });
-  }
-
-  if (!ROLES.includes(role) || role === "system_admin") {
-    return res.status(400).json({ message: "Invalid role" });
-  }
-
-  const generatedPassword = suppliedPassword || randomPassword();
-  const user = {
-    id: crypto.randomUUID(),
-    name,
-    email,
-    role,
-    passwordHash: await bcrypt.hash(generatedPassword, SALT_ROUNDS),
-    mustChangePassword: true,
-    authProvider: "local",
-    createdBy: req.auth.sub,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-
-  try {
-    await createUserRecord(user);
-  } catch (error) {
-    if (error?.code === 11000) {
-      return res.status(409).json({ message: "Email already exists" });
-    }
-    throw error;
-  }
-
-  return res.status(201).json({
-    message: "User created",
-    user: stripPassword(user),
-    generatedPassword,
-  });
-});
-
-app.post("/auth/admin/onboard-merchant", requireAuth, requireRole("system_admin", "admin"), async (req, res) => {
-  const merchantName = String(req.body?.merchantName || "").trim();
-  const email = normalizeEmail(req.body?.email);
-  const suppliedPassword = String(req.body?.password || "").trim();
-
-  if (!merchantName || !email) {
-    return res.status(400).json({ message: "Merchant name and email are required" });
-  }
-
-  const generatedPassword = suppliedPassword || randomPassword();
-  const merchant = {
-    id: crypto.randomUUID(),
-    name: merchantName,
-    email,
-    role: "merchant",
-    passwordHash: await bcrypt.hash(generatedPassword, SALT_ROUNDS),
-    mustChangePassword: true,
-    authProvider: "local",
-    createdBy: req.auth.sub,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-
-  try {
-    await createUserRecord(merchant);
-  } catch (error) {
-    if (error?.code === 11000) {
-      return res.status(409).json({ message: "Email already exists" });
-    }
-    throw error;
-  }
-
-  return res.status(201).json({
-    message: "Merchant onboarded",
-    user: stripPassword(merchant),
-    generatedPassword,
-  });
-});
 
 app.use((error, _req, res, _next) => {
   console.error(error);
@@ -364,7 +279,7 @@ app.use((error, _req, res, _next) => {
 async function connectMongoWithRetry(attempt = 1) {
   try {
     await connectMongo();
-    await bootstrapSystemAdmin();
+    await bootstrapAdmin();
     console.log("MongoDB connected");
   } catch (error) {
     mongoReady = false;

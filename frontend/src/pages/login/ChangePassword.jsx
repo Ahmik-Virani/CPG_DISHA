@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
-import { getRoleHomePath } from "../auth/roleHome";
+import { useAuth } from "../../context/AuthContext";
+import { getRoleHomePath } from "../../auth/roleHome";
 
 export default function ChangePassword() {
   const { user, changePassword } = useAuth();

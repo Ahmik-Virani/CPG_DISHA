@@ -30,8 +30,4 @@ export const authApi = {
   me: (token) => apiRequest("/auth/me", { method: "GET" }, token),
   changePassword: (token, data) =>
     apiRequest("/auth/change-password", { method: "POST", body: JSON.stringify(data) }, token),
-  createUser: (token, data) =>
-    apiRequest("/auth/system-admin/create-user", { method: "POST", body: JSON.stringify(data) }, token),
-  onboardMerchant: (token, data) =>
-    apiRequest("/auth/admin/onboard-merchant", { method: "POST", body: JSON.stringify(data) }, token),
 };

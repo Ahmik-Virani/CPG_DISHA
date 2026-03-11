@@ -81,27 +81,12 @@ export function AuthProvider({ children }) {
     [token, refreshMe]
   );
 
-  const createUser = useCallback(
-    async (payload) => {
-      if (!token) throw new Error("Not authenticated");
-      return authApi.createUser(token, payload);
-    },
-    [token]
-  );
-
-  const onboardMerchant = useCallback(
-    async (payload) => {
-      if (!token) throw new Error("Not authenticated");
-      return authApi.onboardMerchant(token, payload);
-    },
-    [token]
-  );
-
   useEffect(() => {
-    if (token && !user) {
+    if (token) {
       refreshMe();
     }
-  }, [token, user, refreshMe]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const value = {
     token,
@@ -113,8 +98,6 @@ export function AuthProvider({ children }) {
     logout,
     refreshMe,
     changePassword,
-    createUser,
-    onboardMerchant,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

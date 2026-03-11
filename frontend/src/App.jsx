@@ -1,12 +1,9 @@
 import { Navigate, Route, Routes } from "react-router-dom";
-import Login from "./pages/Login";
-import Signup from "./pages/Signup";
+import Login from "./pages/login/Login";
+import Signup from "./pages/login/Signup";
 import Admin from "./pages/admin/Admin";
-import AddMerchant from "./pages/admin/AddMerchant";
 import User from "./pages/user/User";
-import Merchant from "./pages/merchant/Merchant";
-import ChangePassword from "./pages/ChangePassword";
-import SystemAdmin from "./pages/systemAdmin/SystemAdmin";
+import ChangePassword from "./pages/login/ChangePassword";
 import ProtectedRoute from "./components/ProtectedRoute";
 import PublicOnlyRoute from "./components/PublicOnlyRoute";
 
@@ -32,28 +29,10 @@ function App() {
       />
 
       <Route
-        path="/system-admin"
-        element={
-          <ProtectedRoute allowedRoles={["system_admin"]}>
-            <SystemAdmin />
-          </ProtectedRoute>
-        }
-      />
-
-      <Route
         path="/admin"
         element={
-          <ProtectedRoute allowedRoles={["admin", "system_admin"]}>
+          <ProtectedRoute allowedRoles={["admin"]}>
             <Admin />
-          </ProtectedRoute>
-        }
-      />
-
-      <Route
-        path="/admin/addMerchant"
-        element={
-          <ProtectedRoute allowedRoles={["admin", "system_admin"]}>
-            <AddMerchant />
           </ProtectedRoute>
         }
       />
@@ -63,15 +42,6 @@ function App() {
         element={
           <ProtectedRoute allowedRoles={["user"]}>
             <User />
-          </ProtectedRoute>
-        }
-      />
-
-      <Route
-        path="/merchant"
-        element={
-          <ProtectedRoute allowedRoles={["merchant"]}>
-            <Merchant />
           </ProtectedRoute>
         }
       />
