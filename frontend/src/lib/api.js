@@ -32,6 +32,10 @@ export const authApi = {
     apiRequest("/auth/change-password", { method: "POST", body: JSON.stringify(data) }, token),
 };
 
+export const adminApi = {
+  listSystemHeads: (token) => apiRequest("/admin/system-heads", { method: "GET" }, token),
+};
+
 export const eventApi = {
   listMine: (token) => apiRequest("/events", { method: "GET" }, token),
   getOne: (token, eventId) => apiRequest("/events/" + eventId, { method: "GET" }, token),

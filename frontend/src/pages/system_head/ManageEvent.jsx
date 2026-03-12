@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CalendarPlus, ArrowLeft, Store, LogOut } from "lucide-react";
+import { CalendarPlus, ArrowLeft, Store, LogOut, ArrowUpRight } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { eventApi } from "../../lib/api";
@@ -193,18 +193,49 @@ export default function ManageEvent() {
           {isLoadingEvents ? (
             <div className="mt-6 text-center text-gray-500">Loading events...</div>
           ) : events.length > 0 ? (
-            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {events.map((event) => (
-                <button
-                  key={event.id}
-                  type="button"
-                  onClick={() => navigate("/system_head/manage-event/" + event.id, { state: { event } })}
-                  className="rounded-xl border border-gray-200 bg-sky-50 p-5 text-left transition hover:border-black hover:bg-white"
-                >
-                  <p className="text-lg font-semibold text-gray-900">{event.name}</p>
-                </button>
-              ))}
-            </div>
+            <>
+              {events.filter((e) => e.isOngoing).length > 0 && (
+                <div className="mt-6">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-3">Current Events</h3>
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {events.filter((e) => e.isOngoing).map((event) => (
+                      <button
+                        key={event.id}
+                        type="button"
+                        onClick={() => navigate("/system_head/manage-event/" + event.id, { state: { event } })}
+                        className="group relative bg-amber-200 p-6 rounded-2xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer text-left"
+                      >
+                        <div className="absolute top-6 right-6 opacity-0 translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
+                          <ArrowUpRight size={18} className="text-gray-600" />
+                        </div>
+                        <p className="text-lg font-semibold text-gray-900">{event.name}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {events.filter((e) => !e.isOngoing).length > 0 && (
+                <div className="mt-6">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-3">Past Events</h3>
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {events.filter((e) => !e.isOngoing).map((event) => (
+                      <button
+                        key={event.id}
+                        type="button"
+                        onClick={() => navigate("/system_head/manage-event/" + event.id, { state: { event } })}
+                        className="group relative bg-green-300 p-6 rounded-2xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer text-left"
+                      >
+                        <div className="absolute top-6 right-6 opacity-0 translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
+                          <ArrowUpRight size={18} className="text-gray-600" />
+                        </div>
+                        <p className="text-lg font-semibold text-gray-900">{event.name}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           ) : (
             <div className="mt-6 border border-dashed border-gray-300 rounded-xl p-8 text-center">
               <p className="text-lg font-medium text-gray-700">No events as of now</p>

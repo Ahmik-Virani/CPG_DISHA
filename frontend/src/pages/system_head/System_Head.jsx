@@ -39,44 +39,33 @@ export default function SystemHead() {
 
       <div className="bg-sky-50 px-6 py-4">
         <div className="inline-flex bg-gray-200 p-1 rounded-full gap-1 flex-wrap">
-          <button
-            onClick={() => setActiveTab("pending")}
-            className={`flex items-center gap-2 px-5 py-2 rounded-full transition-all duration-200 ${
-              activeTab === "pending"
-                ? "bg-white shadow text-black"
-                : "text-gray-600 hover:text-black"
-            }`}
-          >
-ed Transactions
-          </button>
-
-          <button
-            onClick={() => setActiveTab("history")}
-            className={`flex items-center gap-2 px-5 py-2 rounded-full transition-all duration-200 ${
-              activeTab === "history"
-                ? "bg-white shadow text-black"
-                : "text-gray-600 hover:text-black"
-            }`}
-          >
-            <History size={16} /> Transaction History
-          </button>
-
+          
+      
           <button
             onClick={() => navigate("/system_head/manage-event")}
             className="flex items-center gap-2 px-5 py-2 rounded-full transition-all duration-200 text-gray-600 hover:text-black"
           >
             <PlusCircle size={16} /> Manage Events
           </button>
+
+          <button
+            onClick={() => setActiveTab("settlement")}
+            className={`flex items-center gap-2 px-5 py-2 rounded-full transition-all duration-200 ${
+              activeTab === "settlement"
+                ? "bg-white shadow text-black"
+                : "text-gray-600 hover:text-black"
+            }`}
+          >
+            <History size={16} /> Settlement History
+          </button>
+
         </div>
       </div>
 
       <div className="p-8">
-        {activeTab === "pending" && (
-          <div className="text-center text-gray-500 text-xl mt-20">No pending transactions</div>
-        )}
 
-        {activeTab === "history" && (
-          <div className="text-center text-gray-500 text-xl mt-20">No transaction history</div>
+        {activeTab === "settlement" && (
+          <div className="text-center text-gray-500 text-xl mt-20">No settlement history</div>
         )}
       </div>
     </div>
