@@ -26,14 +26,32 @@ const MONGODB_DB_NAME = String(process.env.MONGODB_DB_NAME || "cpg_disha").trim(
 const ROLES = ["admin", "user", "system_head"];
 const SELF_SIGNUP_ROLES = ["user", "system_head"];
 const SALT_ROUNDS = 10;
+const PAYMENT_BANKS = ["ICICI", "SBI", "HDFC"];
 
 let usersCollection;
+let eventsCollection;
+let fixedPaymentRequestsCollection;
+let oneTimePaymentRequestsCollection;
 let mongoReady = false;
 
 app.use(cors());
 app.use(express.json());
 
 const normalizeEmail = (email) => String(email || "").trim().toLowerCase();
+const normalizeRollNo = (rollNo) => String(rollNo || "").toUpperCase().replace(/\s+/g, "").trim();
+
+function normalizeBanks(banks) {
+  if (!Array.isArray(banks)) {
+    return [];
+  }
+
+  const allowed = new Set(PAYMENT_BANKS);
+  const normalized = banks
+    .map((bank) => String(bank || "").trim().toUpperCase())
+    .filter((bank) => allowed.has(bank));
+
+  return [...new Set(normalized)];
+}
 
 function stripPassword(user) {
   const { _id, passwordHash, ...safeUser } = user;
@@ -70,6 +88,33 @@ function getUsersCollection() {
   return usersCollection;
 }
 
+function getEventsCollection() {
+  if (!eventsCollection) {
+    const error = new Error("MongoDB is not connected yet");
+    error.status = 503;
+    throw error;
+  }
+  return eventsCollection;
+}
+
+function getFixedPaymentRequestsCollection() {
+  if (!fixedPaymentRequestsCollection) {
+    const error = new Error("MongoDB is not connected yet");
+    error.status = 503;
+    throw error;
+  }
+  return fixedPaymentRequestsCollection;
+}
+
+function getOneTimePaymentRequestsCollection() {
+  if (!oneTimePaymentRequestsCollection) {
+    const error = new Error("MongoDB is not connected yet");
+    error.status = 503;
+    throw error;
+  }
+  return oneTimePaymentRequestsCollection;
+}
+
 async function findUserByEmail(email) {
   return getUsersCollection().findOne({ email: normalizeEmail(email) });
 }
@@ -83,6 +128,54 @@ async function createUserRecord(user) {
   return user;
 }
 
+async function createEventRecord(event) {
+  await getEventsCollection().insertOne(event);
+  return event;
+}
+
+async function createFixedPaymentRequestRecord(paymentRequest) {
+  await getFixedPaymentRequestsCollection().insertOne(paymentRequest);
+  return paymentRequest;
+}
+
+async function createOneTimePaymentRequestRecord(paymentRequest) {
+  await getOneTimePaymentRequestsCollection().insertOne(paymentRequest);
+  return paymentRequest;
+}
+
+async function listEventsBySystemHeadId(systemHeadId) {
+  return getEventsCollection()
+    .find({ createdBySystemHeadId: systemHeadId })
+    .sort({ createdAt: -1 })
+    .toArray();
+}
+
+async function findEventByIdForSystemHead(eventId, systemHeadId) {
+  return getEventsCollection().findOne({ id: eventId, createdBySystemHeadId: systemHeadId });
+}
+
+async function markEventDone(eventId, systemHeadId) {
+  const result = await getEventsCollection().updateOne(
+    { id: eventId, createdBySystemHeadId: systemHeadId },
+    {
+      $set: {
+        isOngoing: false,
+        updatedAt: new Date().toISOString(),
+      },
+    }
+  );
+
+  if (!result.matchedCount) {
+    return null;
+  }
+
+  return findEventByIdForSystemHead(eventId, systemHeadId);
+}
+
+async function deleteEventById(eventId, systemHeadId) {
+  return getEventsCollection().deleteOne({ id: eventId, createdBySystemHeadId: systemHeadId });
+}
+
 async function connectMongo() {
   const uri = resolveMongoUri();
   const mongoClient = new MongoClient(uri, {
@@ -93,11 +186,21 @@ async function connectMongo() {
 
   const db = mongoClient.db(MONGODB_DB_NAME);
   usersCollection = db.collection("users");
+  eventsCollection = db.collection("Events");
+  fixedPaymentRequestsCollection = db.collection("Fixed_Payment_Request");
+  oneTimePaymentRequestsCollection = db.collection("One_Time_Payment_Request");
   mongoReady = true;
 
   await usersCollection.createIndex({ id: 1 }, { unique: true });
   await usersCollection.createIndex({ email: 1 }, { unique: true });
   await usersCollection.createIndex({ role: 1 });
+  await eventsCollection.createIndex({ id: 1 }, { unique: true });
+  await eventsCollection.createIndex({ createdBySystemHeadId: 1 });
+  await eventsCollection.createIndex({ isOngoing: 1 });
+  await fixedPaymentRequestsCollection.createIndex({ id: 1 }, { unique: true });
+  await fixedPaymentRequestsCollection.createIndex({ eventId: 1, createdBySystemHeadId: 1 });
+  await oneTimePaymentRequestsCollection.createIndex({ id: 1 }, { unique: true });
+  await oneTimePaymentRequestsCollection.createIndex({ eventId: 1, createdBySystemHeadId: 1 });
 }
 
 function requireAuth(req, res, next) {
@@ -277,7 +380,151 @@ app.get("/auth/me", requireAuth, async (req, res) => {
   return res.json({ user: stripPassword(user) });
 });
 
+app.get("/events", requireAuth, requireRole("system_head"), async (req, res) => {
+  const events = await listEventsBySystemHeadId(req.auth.sub);
+  return res.json({ events });
+});
 
+app.get("/events/:eventId", requireAuth, requireRole("system_head"), async (req, res) => {
+  const event = await findEventByIdForSystemHead(req.params.eventId, req.auth.sub);
+
+  if (!event) {
+    return res.status(404).json({ message: "Event not found" });
+  }
+
+  return res.json({ event });
+});
+
+app.post("/events", requireAuth, requireRole("system_head"), async (req, res) => {
+  const name = String(req.body?.name || "").trim();
+  const description = String(req.body?.description || "").trim();
+
+  if (!name || !description) {
+    return res.status(400).json({ message: "Event name and description are required" });
+  }
+
+  const systemHead = await findUserById(req.auth.sub);
+  if (!systemHead) {
+    return res.status(404).json({ message: "System head not found" });
+  }
+
+  const event = {
+    id: crypto.randomUUID(),
+    name,
+    description,
+    createdBySystemHeadId: req.auth.sub,
+    createdBySystemHeadName: systemHead.name,
+    isOngoing: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  await createEventRecord(event);
+
+  return res.status(201).json({ event });
+});
+
+app.patch("/events/:eventId/complete", requireAuth, requireRole("system_head"), async (req, res) => {
+  const event = await markEventDone(req.params.eventId, req.auth.sub);
+
+  if (!event) {
+    return res.status(404).json({ message: "Event not found" });
+  }
+
+  return res.json({ event });
+});
+
+app.delete("/events/:eventId", requireAuth, requireRole("system_head"), async (req, res) => {
+  const result = await deleteEventById(req.params.eventId, req.auth.sub);
+
+  if (!result.deletedCount) {
+    return res.status(404).json({ message: "Event not found" });
+  }
+
+  return res.json({ message: "Event deleted successfully" });
+});
+
+app.post(
+  "/events/:eventId/payment-requests",
+  requireAuth,
+  requireRole("system_head"),
+  async (req, res) => {
+    const eventId = String(req.params?.eventId || "").trim();
+    const systemHeadId = req.auth.sub;
+    const type = String(req.body?.type || "").trim().toLowerCase();
+    const banks = normalizeBanks(req.body?.banks);
+
+    const event = await findEventByIdForSystemHead(eventId, systemHeadId);
+    if (!event) {
+      return res.status(404).json({ message: "Event not found" });
+    }
+
+    if (!["one_time", "fixed"].includes(type)) {
+      return res.status(400).json({ message: "type must be one of one_time or fixed" });
+    }
+
+    if (!banks.length) {
+      return res.status(400).json({ message: "banks must include at least one valid bank" });
+    }
+
+    if (type === "one_time") {
+      const rollNo = normalizeRollNo(req.body?.rollNo);
+      const amount = Number(req.body?.amount);
+      const ttlRaw = String(req.body?.timeToLive || "").trim();
+      const ttl = new Date(ttlRaw);
+
+      if (!rollNo || !Number.isFinite(amount) || amount <= 0 || !ttlRaw || Number.isNaN(ttl.getTime())) {
+        return res.status(400).json({
+          message: "rollNo, amount, and timeToLive are required for one_time requests",
+        });
+      }
+
+      const now = new Date().toISOString();
+      const paymentRequest = {
+        id: crypto.randomUUID(),
+        createdBySystemHeadId: systemHeadId,
+        eventId,
+        type: "one_time",
+        rollNo,
+        banks,
+        amount,
+        status: "pending",
+        timeToLive: ttl.toISOString(),
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      await createOneTimePaymentRequestRecord(paymentRequest);
+      return res.status(201).json({ paymentRequest, table: "One_Time_Payment_Request" });
+    }
+
+    const isAmountFixed = req.body?.isAmountFixed;
+    if (typeof isAmountFixed !== "boolean") {
+      return res.status(400).json({ message: "isAmountFixed must be a boolean for fixed requests" });
+    }
+
+    const amount = Number(req.body?.amount);
+    if (isAmountFixed && (!Number.isFinite(amount) || amount <= 0)) {
+      return res.status(400).json({ message: "amount must be greater than 0 when isAmountFixed is true" });
+    }
+
+    const now = new Date().toISOString();
+    const paymentRequest = {
+      id: crypto.randomUUID(),
+      createdBySystemHeadId: systemHeadId,
+      eventId,
+      type: "fixed",
+      banks,
+      isAmountFixed,
+      amount: isAmountFixed ? amount : null,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await createFixedPaymentRequestRecord(paymentRequest);
+    return res.status(201).json({ paymentRequest, table: "Fixed_Payment_Request" });
+  }
+);
 
 app.use((error, _req, res, _next) => {
   console.error(error);
@@ -296,6 +543,9 @@ async function connectMongoWithRetry(attempt = 1) {
   } catch (error) {
     mongoReady = false;
     usersCollection = undefined;
+    eventsCollection = undefined;
+    fixedPaymentRequestsCollection = undefined;
+    oneTimePaymentRequestsCollection = undefined;
     const delayMs = Math.min(30000, attempt * 3000);
     console.error("MongoDB connect failed (attempt " + attempt + "). Retrying in " + Math.round(delayMs / 1000) + "s", error?.message || error);
     setTimeout(() => {

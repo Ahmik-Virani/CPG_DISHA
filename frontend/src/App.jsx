@@ -4,6 +4,8 @@ import Signup from "./pages/login/Signup";
 import Admin from "./pages/admin/Admin";
 import User from "./pages/user/User";
 import SystemHead from "./pages/system_head/System_Head";
+import ManageEvent from "./pages/system_head/ManageEvent";
+import EventPage from "./pages/system_head/EventPage";
 import ChangePassword from "./pages/login/ChangePassword";
 import ProtectedRoute from "./components/ProtectedRoute";
 import PublicOnlyRoute from "./components/PublicOnlyRoute";
@@ -52,6 +54,24 @@ function App() {
         element={
           <ProtectedRoute allowedRoles={["system_head"]}>
             <SystemHead />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/system_head/manage-event"
+        element={
+          <ProtectedRoute allowedRoles={["system_head"]}>
+            <ManageEvent />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/system_head/manage-event/:eventId"
+        element={
+          <ProtectedRoute allowedRoles={["system_head"]}>
+            <EventPage />
           </ProtectedRoute>
         }
       />

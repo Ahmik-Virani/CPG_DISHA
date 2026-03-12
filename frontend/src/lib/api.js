@@ -31,3 +31,15 @@ export const authApi = {
   changePassword: (token, data) =>
     apiRequest("/auth/change-password", { method: "POST", body: JSON.stringify(data) }, token),
 };
+
+export const eventApi = {
+  listMine: (token) => apiRequest("/events", { method: "GET" }, token),
+  getOne: (token, eventId) => apiRequest("/events/" + eventId, { method: "GET" }, token),
+  create: (token, data) =>
+    apiRequest("/events", { method: "POST", body: JSON.stringify(data) }, token),
+  markDone: (token, eventId) =>
+    apiRequest("/events/" + eventId + "/complete", { method: "PATCH" }, token),
+  remove: (token, eventId) => apiRequest("/events/" + eventId, { method: "DELETE" }, token),
+  createPaymentRequest: (token, eventId, data) =>
+    apiRequest("/events/" + eventId + "/payment-requests", { method: "POST", body: JSON.stringify(data) }, token),
+};
