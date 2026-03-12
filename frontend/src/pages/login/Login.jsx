@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Shield, User } from "lucide-react";
+import { Shield, User, Settings } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { getRoleHomePath } from "../../auth/roleHome";
 
@@ -60,6 +60,17 @@ export default function Login() {
             <button
               type="button"
               className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${
+                selectedRole === "system_head"
+                  ? "bg-white shadow text-black"
+                  : "text-gray-500 hover:text-black"
+              }`}
+              onClick={() => setSelectedRole("system_head")}
+            >
+              <Settings size={16} /> System Head
+            </button>
+            <button
+              type="button"
+              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all ${
                 selectedRole === "admin"
                   ? "bg-white shadow text-black"
                   : "text-gray-500 hover:text-black"
@@ -92,7 +103,7 @@ export default function Login() {
           </button>
         </form>
 
-        {selectedRole === "user" && (
+        {(selectedRole === "user" || selectedRole === "system_head") && (
           <p className="text-sm text-center mt-4 text-gray-600">
             New user? <Link to="/signup" className="text-blue-600">Create account</Link>
           </p>

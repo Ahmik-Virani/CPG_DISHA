@@ -16,9 +16,9 @@ import { useAuth } from "../../context/AuthContext";
 export default function Admin() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState("merchants");
+  const [activeTab, setActiveTab] = useState("system_head");
 
-  const merchants = [
+  const system_head = [
     { name: "IIT Mess", desc: "Dining & Cafeteria", icon: "mess", color: "bg-orange-500" },
     { name: "Campus Hospital", desc: "Medical Services", icon: "hospital", color: "bg-red-500" },
     { name: "Central Library", desc: "Books & Fees", icon: "library", color: "bg-blue-500" },
@@ -63,12 +63,12 @@ export default function Admin() {
       <div className="bg-sky-50 px-6 py-4">
         <div className="inline-flex bg-gray-200 p-1 rounded-full gap-1">
           <button
-            onClick={() => setActiveTab("merchants")}
+            onClick={() => setActiveTab("system_head")}
             className={`flex items-center gap-2 px-5 py-2 rounded-full transition-all duration-200 ${
-              activeTab === "merchants" ? "bg-white shadow text-black" : "text-gray-600 hover:text-black"
+              activeTab === "system_head" ? "bg-white shadow text-black" : "text-gray-600 hover:text-black"
             }`}
           >
-            <Store size={16} /> Merchants
+            <Store size={16} /> System Head
           </button>
 
           <button
@@ -83,11 +83,11 @@ export default function Admin() {
       </div>
 
       <div className="p-8">
-        {activeTab === "merchants" && (
+        {activeTab === "system_head" && (
           <>
             <div className="flex justify-between items-center mb-6">
               <div>
-                <h2 className="text-2xl font-semibold">Manage Merchants</h2>
+                <h2 className="text-2xl font-semibold">Manage System Heads</h2>
               </div>
 
               {/* <button
@@ -100,11 +100,11 @@ export default function Admin() {
 
             <div className="flex items-center bg-white border rounded-lg px-3 py-2 w-[350px] mb-8">
               <Search size={16} className="text-gray-500" />
-              <input className="ml-2 outline-none w-full" placeholder="Search merchants..." />
+              <input className="ml-2 outline-none w-full" placeholder="Search System Head..." />
             </div>
 
             <div className="grid grid-cols-3 gap-6">
-              {merchants.map((m) => (
+              {system_head.map((m) => (
                 <div
                   key={m.name}
                   className="group relative bg-white p-6 rounded-2xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer"

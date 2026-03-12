@@ -3,6 +3,7 @@ import Login from "./pages/login/Login";
 import Signup from "./pages/login/Signup";
 import Admin from "./pages/admin/Admin";
 import User from "./pages/user/User";
+import SystemHead from "./pages/system_head/System_Head";
 import ChangePassword from "./pages/login/ChangePassword";
 import ProtectedRoute from "./components/ProtectedRoute";
 import PublicOnlyRoute from "./components/PublicOnlyRoute";
@@ -42,6 +43,15 @@ function App() {
         element={
           <ProtectedRoute allowedRoles={["user"]}>
             <User />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/system_head"
+        element={
+          <ProtectedRoute allowedRoles={["system_head"]}>
+            <SystemHead />
           </ProtectedRoute>
         }
       />

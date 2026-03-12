@@ -54,10 +54,10 @@ export function AuthProvider({ children }) {
   );
 
   const signup = useCallback(
-    async (name, email, password) => {
+    async (name, roll_no, email, password, role="user") => {
       setLoading(true);
       try {
-        const data = await authApi.signup({ name, email, password });
+        const data = await authApi.signup({ name, roll_no, email, password, role });
         persistAuth(data.token, data.user);
         return data.user;
       } finally {

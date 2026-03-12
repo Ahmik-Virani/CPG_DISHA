@@ -1,38 +1,88 @@
-import { LogOut } from "lucide-react";
+import {
+  Clock,
+  History,
+  Store,
+  LogOut,
+} from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
+import { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 
 export default function User() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const [activeTab, setActiveTab] = useState("pending");
 
   return (
     <div className="min-h-screen bg-sky-50">
+      {/* Navbar */}
       <div className="flex justify-between items-center px-6 py-4 border-b bg-white">
         <div className="flex items-center gap-3">
+          <div className="bg-indigo-600 text-white p-2 rounded-lg">
+            <Store size={20} />
+          </div>
           <div>
             <h1 className="font-semibold text-lg">IIT Hyderabad Payment Gateway</h1>
             <p className="text-sm text-gray-500">{user?.email}</p>
           </div>
         </div>
 
-        <div className="flex gap-3 items-center">
-          <Link to="/change-password" className="border px-4 py-2 rounded-lg">Change Password</Link>
+        <div className="flex items-center gap-3">
+          <Link to="/change-password" className="border px-4 py-2 rounded-lg">
+            Change Password
+          </Link>
           <button
             onClick={() => {
               logout();
               navigate("/");
             }}
-            className="border px-4 py-2 rounded-lg flex items-center gap-2"
+            className="border px-4 py-2 rounded-lg flex items-center gap-2 cursor-pointer"
           >
             <LogOut size={16} /> Logout
           </button>
         </div>
       </div>
 
+      {/* Tab Bar */}
+      <div className="bg-sky-50 px-6 py-4">
+        <div className="inline-flex bg-gray-200 p-1 rounded-full gap-1">
+          <button
+            onClick={() => setActiveTab("pending")}
+            className={`flex items-center gap-2 px-5 py-2 rounded-full transition-all duration-200 ${
+              activeTab === "pending"
+                ? "bg-white shadow text-black"
+                : "text-gray-600 hover:text-black"
+            }`}
+          >
+            <Clock size={16} /> Pending Transactions
+          </button>
+
+          <button
+            onClick={() => setActiveTab("history")}
+            className={`flex items-center gap-2 px-5 py-2 rounded-full transition-all duration-200 ${
+              activeTab === "history"
+                ? "bg-white shadow text-black"
+                : "text-gray-600 hover:text-black"
+            }`}
+          >
+            <History size={16} /> Transaction History
+          </button>
+        </div>
+      </div>
+
+      {/* Tab Content */}
       <div className="p-8">
-        <h2 className="text-3xl font-semibold">Hello, {user?.name}!</h2>
-        <p className="text-gray-500 mt-2">Welcome to your dashboard.</p>
+        {activeTab === "pending" && (
+          <div className="text-center text-gray-500 text-xl mt-20">
+            No pending transactions
+          </div>
+        )}
+
+        {activeTab === "history" && (
+          <div className="text-center text-gray-500 text-xl mt-20">
+            No transaction history
+          </div>
+        )}
       </div>
     </div>
   );

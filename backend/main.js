@@ -23,7 +23,8 @@ const MONGODB_USER_ID = String(
 ).trim();
 const MONGODB_PWD = String(process.env.MONGODB_PWD || "").trim();
 const MONGODB_DB_NAME = String(process.env.MONGODB_DB_NAME || "cpg_disha").trim();
-const ROLES = ["admin", "user"];
+const ROLES = ["admin", "user", "system_head"];
+const SELF_SIGNUP_ROLES = ["user", "system_head"];
 const SALT_ROUNDS = 10;
 
 let usersCollection;
@@ -186,9 +187,19 @@ app.post("/auth/signup", async (req, res) => {
   const name = String(req.body?.name || "").trim();
   const email = normalizeEmail(req.body?.email);
   const password = String(req.body?.password || "");
+  const role = String(req.body?.role || "user").trim();
+  const roll_no = role === "user" ? String(req.body?.roll_no || "").trim().toUpperCase() : undefined;
 
   if (!name || !email || !password) {
     return res.status(400).json({ message: "Name, email, and password are required" });
+  }
+
+  if (role === "user" && !roll_no) {
+    return res.status(400).json({ message: "Roll number is required for users" });
+  }
+
+  if (!ROLES.includes(role) || !SELF_SIGNUP_ROLES.includes(role)) {
+    return res.status(400).json({ message: "Invalid signup role" });
   }
 
   if (password.length < 8) {
@@ -199,7 +210,8 @@ app.post("/auth/signup", async (req, res) => {
     id: crypto.randomUUID(),
     name,
     email,
-    role: "user",
+    role,
+    ...(roll_no && { roll_no }),
     passwordHash: await bcrypt.hash(password, SALT_ROUNDS),
     mustChangePassword: false,
     authProvider: "local",
