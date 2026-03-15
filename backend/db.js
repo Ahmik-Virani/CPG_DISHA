@@ -85,6 +85,35 @@ export async function createOneTimePaymentRequestRecord(paymentRequest) {
   return paymentRequest;
 }
 
+export async function listOneTimePaymentRequestsByRollNo(rollNo) {
+  return getOneTimePaymentRequestsCollection()
+    .find({ rollNo })
+    .sort({ createdAt: -1 })
+    .toArray();
+}
+
+export async function listAllFixedPaymentRequests() {
+  return getFixedPaymentRequestsCollection()
+    .find({})
+    .sort({ createdAt: -1 })
+    .toArray();
+}
+
+export async function listEventsByIds(eventIds) {
+  const ids = Array.isArray(eventIds)
+    ? [...new Set(eventIds.map((id) => String(id || "").trim()).filter(Boolean))]
+    : [];
+
+  if (!ids.length) {
+    return [];
+  }
+
+  return getEventsCollection()
+    .find({ id: { $in: ids } })
+    .project({ _id: 0, id: 1, name: 1 })
+    .toArray();
+}
+
 export async function listEventsBySystemHeadId(systemHeadId) {
   return getEventsCollection()
     .find({ createdBySystemHeadId: systemHeadId })

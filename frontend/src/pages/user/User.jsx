@@ -3,15 +3,47 @@ import {
   History,
   Store,
   LogOut,
+  Layers,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "../../context/AuthContext";
+import { userPaymentApi } from "../../lib/api";
 
 export default function User() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, token, logout } = useAuth();
   const [activeTab, setActiveTab] = useState("pending");
+
+  const [pendingRequests, setPendingRequests] = useState([]);
+  const [pendingLoading, setPendingLoading] = useState(false);
+  const [pendingError, setPendingError] = useState("");
+
+  const [optionalRequests, setOptionalRequests] = useState([]);
+  const [optionalLoading, setOptionalLoading] = useState(false);
+  const [optionalError, setOptionalError] = useState("");
+
+  useEffect(() => {
+    if (activeTab !== "pending" || pendingRequests.length > 0) return;
+    setPendingLoading(true);
+    setPendingError("");
+    userPaymentApi
+      .getPending(token)
+      .then((data) => setPendingRequests(data.requests || []))
+      .catch((err) => setPendingError(err.message || "Failed to load pending transactions"))
+      .finally(() => setPendingLoading(false));
+  }, [activeTab, token]);
+
+  useEffect(() => {
+    if (activeTab !== "optional" || optionalRequests.length > 0) return;
+    setOptionalLoading(true);
+    setOptionalError("");
+    userPaymentApi
+      .getOptional(token)
+      .then((data) => setOptionalRequests(data.requests || []))
+      .catch((err) => setOptionalError(err.message || "Failed to load optional transactions"))
+      .finally(() => setOptionalLoading(false));
+  }, [activeTab, token]);
 
   return (
     <div className="min-h-screen bg-sky-50">
@@ -58,6 +90,17 @@ export default function User() {
           </button>
 
           <button
+            onClick={() => setActiveTab("optional")}
+            className={`flex items-center gap-2 px-5 py-2 rounded-full transition-all duration-200 ${
+              activeTab === "optional"
+                ? "bg-white shadow text-black"
+                : "text-gray-600 hover:text-black"
+            }`}
+          >
+            <Layers size={16} /> Optional Transactions
+          </button>
+
+          <button
             onClick={() => setActiveTab("history")}
             className={`flex items-center gap-2 px-5 py-2 rounded-full transition-all duration-200 ${
               activeTab === "history"
@@ -73,8 +116,75 @@ export default function User() {
       {/* Tab Content */}
       <div className="p-8">
         {activeTab === "pending" && (
-          <div className="text-center text-gray-500 text-xl mt-20">
-            No pending transactions
+          <div>
+            {pendingLoading && (
+              <p className="text-center text-gray-400 mt-20">Loading...</p>
+            )}
+            {!pendingLoading && pendingError && (
+              <p className="text-center text-red-500 mt-20">{pendingError}</p>
+            )}
+            {!pendingLoading && !pendingError && pendingRequests.length === 0 && (
+              <div className="text-center text-gray-500 text-xl mt-20">
+                No pending transactions
+              </div>
+            )}
+            {!pendingLoading && !pendingError && pendingRequests.length > 0 && (
+              <div className="max-w-2xl mx-auto flex flex-col gap-4">
+                {pendingRequests.map((req) => (
+                  <div key={req.id} className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="font-semibold text-gray-800">&#8377;{req.amount}</span>
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium capitalize ${
+                        req.status === "pending"
+                          ? "bg-yellow-100 text-yellow-700"
+                          : "bg-green-100 text-green-700"
+                      }`}>
+                        {req.status}
+                      </span>
+                    </div>
+                    <div className="text-sm text-gray-600 space-y-1">
+                      <p><span className="font-medium">Pay Before:</span> {new Date(req.timeToLive).toLocaleString()}</p>
+                      <p><span className="font-medium">Event:</span> {req.eventName || "Unknown Event"}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "optional" && (
+          <div>
+            {optionalLoading && (
+              <p className="text-center text-gray-400 mt-20">Loading...</p>
+            )}
+            {!optionalLoading && optionalError && (
+              <p className="text-center text-red-500 mt-20">{optionalError}</p>
+            )}
+            {!optionalLoading && !optionalError && optionalRequests.length === 0 && (
+              <div className="text-center text-gray-500 text-xl mt-20">
+                No optional transactions
+              </div>
+            )}
+            {!optionalLoading && !optionalError && optionalRequests.length > 0 && (
+              <div className="max-w-2xl mx-auto flex flex-col gap-4">
+                {optionalRequests.map((req) => (
+                  <div key={req.id} className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="font-semibold text-gray-800">
+                        {req.isAmountFixed ? `\u20B9${req.amount}` : "Variable Amount"}
+                      </span>
+                      <span className="text-xs px-2 py-1 rounded-full font-medium bg-blue-100 text-blue-700">
+                        {req.isAmountFixed ? "Fixed" : "Open"}
+                      </span>
+                    </div>
+                    <div className="text-sm text-gray-600 space-y-1">
+                      <p><span className="font-medium">Event:</span> {req.eventName || "Unknown Event"}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

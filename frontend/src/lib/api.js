@@ -47,3 +47,8 @@ export const eventApi = {
   createPaymentRequest: (token, eventId, data) =>
     apiRequest("/events/" + eventId + "/payment-requests", { method: "POST", body: JSON.stringify(data) }, token),
 };
+
+export const userPaymentApi = {
+  getPending: (token) => apiRequest("/user-payments/pending", { method: "GET" }, token),
+  getOptional: (token) => apiRequest("/user-payments/optional", { method: "GET" }, token),
+};

@@ -12,6 +12,7 @@ import eventRoutes from "./routes/events.js";
 import paymentRoutes from "./routes/payments.js";
 import healthRoutes from "./routes/health.js";
 import adminRoutes from "./routes/admin.js";
+import userPaymentRoutes from "./routes/user-payments.js";
 
 const app = express();
 
@@ -23,6 +24,7 @@ app.use("/auth", authRoutes);
 app.use("/events", eventRoutes);
 app.use("/events", paymentRoutes);
 app.use("/admin", adminRoutes);
+app.use("/user-payments", userPaymentRoutes);
 
 app.use((error, _req, res, _next) => {
   console.error(error);
