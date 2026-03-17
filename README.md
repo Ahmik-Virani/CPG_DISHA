@@ -1,2 +1,7 @@
+### Install dependencies
+ - npm i
+
 ### steps to run
-- in /frontend  npm install -> npm run dev
+Use 2 terminal tabs:
+- in /frontend npm run dev
+- in /backend npm run dev
