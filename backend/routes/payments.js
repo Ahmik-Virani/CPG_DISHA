@@ -5,10 +5,29 @@ import {
   findEventByIdForSystemHead,
   createOneTimePaymentRequestRecord,
   createFixedPaymentRequestRecord,
+  findLatestPaymentRequestByEventAndSystemHead,
 } from "../db.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 
 const router = Router();
+
+router.get(
+  "/:eventId/payment-requests/latest",
+  requireAuth,
+  requireRole("system_head"),
+  async (req, res) => {
+    const eventId = String(req.params?.eventId || "").trim();
+    const systemHeadId = req.auth.sub;
+
+    const event = await findEventByIdForSystemHead(eventId, systemHeadId);
+    if (!event) {
+      return res.status(404).json({ message: "Event not found" });
+    }
+
+    const paymentRequest = await findLatestPaymentRequestByEventAndSystemHead(eventId, systemHeadId);
+    return res.json({ paymentRequest: paymentRequest || null });
+  }
+);
 
 router.post(
   "/:eventId/payment-requests",
@@ -23,6 +42,14 @@ router.post(
     const event = await findEventByIdForSystemHead(eventId, systemHeadId);
     if (!event) {
       return res.status(404).json({ message: "Event not found" });
+    }
+
+    const existingRequest = await findLatestPaymentRequestByEventAndSystemHead(eventId, systemHeadId);
+    if (existingRequest) {
+      return res.status(409).json({
+        message: "Payment request already exists for this event",
+        paymentRequest: existingRequest,
+      });
     }
 
     if (!["one_time", "fixed"].includes(type)) {

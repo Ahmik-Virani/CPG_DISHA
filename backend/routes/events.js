@@ -7,6 +7,7 @@ import {
   findEventByIdForSystemHead,
   markEventDone,
   deleteEventById,
+  getLatestPaymentRequestTypeByEventIds,
 } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireRole } from "../middleware/auth.js";
@@ -15,7 +16,17 @@ const router = Router();
 
 router.get("/", requireAuth, requireRole("system_head"), async (req, res) => {
   const events = await listEventsBySystemHeadId(req.auth.sub);
-  return res.json({ events });
+  const typeByEventId = await getLatestPaymentRequestTypeByEventIds(
+    events.map((event) => event.id),
+    req.auth.sub
+  );
+
+  const eventsWithPaymentType = events.map((event) => ({
+    ...event,
+    paymentRequestType: typeByEventId.get(event.id) || null,
+  }));
+
+  return res.json({ events: eventsWithPaymentType });
 });
 
 router.get("/:eventId", requireAuth, requireRole("system_head"), async (req, res) => {

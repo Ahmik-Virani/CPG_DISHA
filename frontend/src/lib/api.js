@@ -41,6 +41,8 @@ export const adminApi = {
 export const eventApi = {
   listMine: (token) => apiRequest("/events", { method: "GET" }, token),
   getOne: (token, eventId) => apiRequest("/events/" + eventId, { method: "GET" }, token),
+  getLatestPaymentRequest: (token, eventId) =>
+    apiRequest("/events/" + eventId + "/payment-requests/latest", { method: "GET" }, token),
   create: (token, data) =>
     apiRequest("/events", { method: "POST", body: JSON.stringify(data) }, token),
   markDone: (token, eventId) =>

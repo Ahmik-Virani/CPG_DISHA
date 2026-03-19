@@ -10,6 +10,16 @@ function normalizeRollNoInput(value) {
   return String(value || "").toUpperCase().replace(/\s+/g, "").trim();
 }
 
+function formatPaymentType(type) {
+  if (type === "one_time") {
+    return "One-Time";
+  }
+  if (type === "fixed") {
+    return "Fixed";
+  }
+  return "Unknown";
+}
+
 export default function EventPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -21,6 +31,9 @@ export default function EventPage() {
   const [isActing, setIsActing] = useState(false);
   const [paymentStep, setPaymentStep] = useState("idle");
   const [paymentType, setPaymentType] = useState("");
+  const [paymentRequest, setPaymentRequest] = useState(null);
+  const [isLoadingPaymentRequest, setIsLoadingPaymentRequest] = useState(true);
+  const [showPaymentDetails, setShowPaymentDetails] = useState(false);
   const [paymentForm, setPaymentForm] = useState({
     rollNo: "",
     banks: [],
@@ -29,6 +42,7 @@ export default function EventPage() {
     isAmountFixed: false,
   });
   const [paymentFeedback, setPaymentFeedback] = useState({ type: "", message: "" });
+  const canShowPaymentActions = Boolean(event?.isOngoing || paymentRequest);
 
   useEffect(() => {
     let isMounted = true;
@@ -37,14 +51,22 @@ export default function EventPage() {
       if (!token || !eventId) {
         if (isMounted) {
           setIsLoading(false);
+          setIsLoadingPaymentRequest(false);
         }
         return;
       }
 
       try {
-        const data = await eventApi.getOne(token, eventId);
         if (isMounted) {
-          setEvent(data.event || null);
+          setIsLoadingPaymentRequest(true);
+        }
+        const [eventData, paymentData] = await Promise.all([
+          eventApi.getOne(token, eventId),
+          eventApi.getLatestPaymentRequest(token, eventId),
+        ]);
+        if (isMounted) {
+          setEvent(eventData.event || null);
+          setPaymentRequest(paymentData.paymentRequest || null);
         }
       } catch (err) {
         if (isMounted) {
@@ -53,6 +75,7 @@ export default function EventPage() {
       } finally {
         if (isMounted) {
           setIsLoading(false);
+          setIsLoadingPaymentRequest(false);
         }
       }
     }
@@ -116,6 +139,9 @@ export default function EventPage() {
   };
 
   const openPaymentChooser = () => {
+    if (paymentRequest) {
+      return;
+    }
     setPaymentStep("choose");
     setPaymentType("");
     resetPaymentForm();
@@ -195,11 +221,13 @@ export default function EventPage() {
     setPaymentFeedback({ type: "", message: "" });
 
     try {
-      await eventApi.createPaymentRequest(token, eventId, payload);
+      const data = await eventApi.createPaymentRequest(token, eventId, payload);
+      setPaymentRequest(data.paymentRequest || payload);
+      setShowPaymentDetails(true);
       setPaymentFeedback({ type: "success", message: "Payment request created successfully." });
       resetPaymentForm();
       setPaymentType("");
-      setPaymentStep("choose");
+      setPaymentStep("idle");
     } catch (err) {
       setPaymentFeedback({ type: "error", message: err.message || "Failed to create payment request." });
     } finally {
@@ -283,14 +311,73 @@ export default function EventPage() {
 
               {event.description ? <p className="mt-6 text-gray-700">{event.description}</p> : null}
 
-              <div className="mt-8 flex flex-wrap gap-3">
-                <button type="button" onClick={openPaymentChooser} className="rounded-lg border px-4 py-2">
-                  Request Payment
-                </button>
-                <button type="button" className="rounded-lg border px-4 py-2">
-                  Check Payment Status
-                </button>
-              </div>
+              {canShowPaymentActions ? (
+                <div className="mt-8 flex flex-wrap gap-3">
+                  {paymentRequest ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowPaymentDetails((prev) => !prev)}
+                      className="rounded-lg border px-4 py-2"
+                    >
+                      {showPaymentDetails ? "Hide Request Details" : "View Request Details"}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={openPaymentChooser}
+                      disabled={isLoadingPaymentRequest}
+                      className="rounded-lg border px-4 py-2 disabled:opacity-60"
+                    >
+                      {isLoadingPaymentRequest ? "Loading..." : "Request Payment"}
+                    </button>
+                  )}
+                  <button type="button" className="rounded-lg border px-4 py-2">
+                    Check Payment Status
+                  </button>
+                </div>
+              ) : null}
+
+              {paymentRequest && showPaymentDetails ? (
+                <div className="mt-6 rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <h3 className="text-sm font-semibold text-gray-800">Request Details</h3>
+                  <div className="mt-3 grid gap-2 text-sm text-gray-700 md:grid-cols-2">
+                    <p>
+                      <span className="font-medium">Request Type:</span> {formatPaymentType(paymentRequest.type)}
+                    </p>
+                    <p>
+                      <span className="font-medium">Banks:</span> {Array.isArray(paymentRequest.banks) && paymentRequest.banks.length ? paymentRequest.banks.join(", ") : "-"}
+                    </p>
+
+                    {paymentRequest.type === "one_time" ? (
+                      <>
+                        <p>
+                          <span className="font-medium">Roll No:</span> {paymentRequest.rollNo || "-"}
+                        </p>
+                        <p>
+                          <span className="font-medium">Amount:</span> {typeof paymentRequest.amount === "number" ? `\u20B9${paymentRequest.amount}` : "-"}
+                        </p>
+                        <p>
+                          <span className="font-medium">Time To Live:</span> {paymentRequest.timeToLive ? new Date(paymentRequest.timeToLive).toLocaleString() : "-"}
+                        </p>
+                      </>
+                    ) : null}
+
+                    {paymentRequest.type === "fixed" ? (
+                      <>
+                        <p>
+                          <span className="font-medium">Is Amount Fixed:</span> {paymentRequest.isAmountFixed ? "Yes" : "No"}
+                        </p>
+                        <p>
+                          <span className="font-medium">Amount:</span>{" "}
+                          {paymentRequest.isAmountFixed && typeof paymentRequest.amount === "number"
+                            ? `\u20B9${paymentRequest.amount}`
+                            : "Variable"}
+                        </p>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
 
               {paymentStep === "choose" ? (
                 <div className="mt-6 rounded-xl border border-gray-200 bg-gray-50 p-4">

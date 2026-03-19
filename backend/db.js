@@ -121,6 +121,79 @@ export async function listEventsBySystemHeadId(systemHeadId) {
     .toArray();
 }
 
+function mergeLatestRequestsByEventId(requests, latestByEventId) {
+  requests.forEach((request) => {
+    const eventId = String(request.eventId || "").trim();
+    if (!eventId) {
+      return;
+    }
+
+    const existing = latestByEventId.get(eventId);
+    if (!existing || new Date(request.createdAt || 0).getTime() > new Date(existing.createdAt || 0).getTime()) {
+      latestByEventId.set(eventId, request);
+    }
+  });
+}
+
+export async function findLatestPaymentRequestByEventAndSystemHead(eventId, systemHeadId) {
+  const [fixedRequest, oneTimeRequest] = await Promise.all([
+    getFixedPaymentRequestsCollection()
+      .find({ eventId, createdBySystemHeadId: systemHeadId })
+      .sort({ createdAt: -1 })
+      .limit(1)
+      .next(),
+    getOneTimePaymentRequestsCollection()
+      .find({ eventId, createdBySystemHeadId: systemHeadId })
+      .sort({ createdAt: -1 })
+      .limit(1)
+      .next(),
+  ]);
+
+  if (!fixedRequest) {
+    return oneTimeRequest || null;
+  }
+
+  if (!oneTimeRequest) {
+    return fixedRequest;
+  }
+
+  return new Date(fixedRequest.createdAt || 0).getTime() > new Date(oneTimeRequest.createdAt || 0).getTime()
+    ? fixedRequest
+    : oneTimeRequest;
+}
+
+export async function getLatestPaymentRequestTypeByEventIds(eventIds, systemHeadId) {
+  const ids = Array.isArray(eventIds)
+    ? [...new Set(eventIds.map((id) => String(id || "").trim()).filter(Boolean))]
+    : [];
+
+  if (!ids.length) {
+    return new Map();
+  }
+
+  const [fixedRequests, oneTimeRequests] = await Promise.all([
+    getFixedPaymentRequestsCollection()
+      .find({ eventId: { $in: ids }, createdBySystemHeadId: systemHeadId })
+      .sort({ createdAt: -1 })
+      .toArray(),
+    getOneTimePaymentRequestsCollection()
+      .find({ eventId: { $in: ids }, createdBySystemHeadId: systemHeadId })
+      .sort({ createdAt: -1 })
+      .toArray(),
+  ]);
+
+  const latestByEventId = new Map();
+  mergeLatestRequestsByEventId(fixedRequests, latestByEventId);
+  mergeLatestRequestsByEventId(oneTimeRequests, latestByEventId);
+
+  const typeByEventId = new Map();
+  latestByEventId.forEach((request, eventId) => {
+    typeByEventId.set(eventId, String(request.type || "").trim().toLowerCase() || null);
+  });
+
+  return typeByEventId;
+}
+
 export async function findEventByIdForSystemHead(eventId, systemHeadId) {
   return getEventsCollection().findOne({ id: eventId, createdBySystemHeadId: systemHeadId });
 }
@@ -144,7 +217,27 @@ export async function markEventDone(eventId, systemHeadId) {
 }
 
 export async function deleteEventById(eventId, systemHeadId) {
-  return getEventsCollection().deleteOne({ id: eventId, createdBySystemHeadId: systemHeadId });
+  const eventDeleteResult = await getEventsCollection().deleteOne({
+    id: eventId,
+    createdBySystemHeadId: systemHeadId,
+  });
+
+  if (!eventDeleteResult.deletedCount) {
+    return eventDeleteResult;
+  }
+
+  await Promise.all([
+    getFixedPaymentRequestsCollection().deleteMany({
+      eventId,
+      createdBySystemHeadId: systemHeadId,
+    }),
+    getOneTimePaymentRequestsCollection().deleteMany({
+      eventId,
+      createdBySystemHeadId: systemHeadId,
+    }),
+  ]);
+
+  return eventDeleteResult;
 }
 
 async function connectMongo() {

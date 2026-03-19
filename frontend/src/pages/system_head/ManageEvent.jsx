@@ -4,6 +4,18 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { eventApi } from "../../lib/api";
 
+function formatPaymentType(type) {
+  if (type === "one_time") {
+    return "One-Time";
+  }
+
+  if (type === "fixed") {
+    return "Fixed";
+  }
+
+  return "Not Set";
+}
+
 export default function ManageEvent() {
   const navigate = useNavigate();
   const { user, token, logout } = useAuth();
@@ -15,6 +27,9 @@ export default function ManageEvent() {
   const [successMessage, setSuccessMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingEvents, setIsLoadingEvents] = useState(true);
+  const newEvents = events.filter((e) => e.isOngoing && !e.paymentRequestType);
+  const currentEvents = events.filter((e) => e.isOngoing && e.paymentRequestType);
+  const pastEvents = events.filter((e) => !e.isOngoing);
 
   useEffect(() => {
     let isMounted = true;
@@ -194,11 +209,33 @@ export default function ManageEvent() {
             <div className="mt-6 text-center text-gray-500">Loading events...</div>
           ) : events.length > 0 ? (
             <>
-              {events.filter((e) => e.isOngoing).length > 0 && (
+              {newEvents.length > 0 && (
+                <div className="mt-6">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-3">New Events</h3>
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {newEvents.map((event) => (
+                      <button
+                        key={event.id}
+                        type="button"
+                        onClick={() => navigate("/system_head/manage-event/" + event.id, { state: { event } })}
+                        className="group relative bg-amber-100 p-6 rounded-2xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer text-left"
+                      >
+                        <div className="absolute top-6 right-6 opacity-0 translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
+                          <ArrowUpRight size={18} className="text-gray-600" />
+                        </div>
+                        <p className="text-lg font-semibold text-gray-900">{event.name}</p>
+                        <p className="mt-2 text-sm text-gray-700">Type: {formatPaymentType(event.paymentRequestType)}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {currentEvents.length > 0 && (
                 <div className="mt-6">
                   <h3 className="text-lg font-semibold text-gray-800 mb-3">Current Events</h3>
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {events.filter((e) => e.isOngoing).map((event) => (
+                    {currentEvents.map((event) => (
                       <button
                         key={event.id}
                         type="button"
@@ -209,17 +246,18 @@ export default function ManageEvent() {
                           <ArrowUpRight size={18} className="text-gray-600" />
                         </div>
                         <p className="text-lg font-semibold text-gray-900">{event.name}</p>
+                        <p className="mt-2 text-sm text-gray-700">Type: {formatPaymentType(event.paymentRequestType)}</p>
                       </button>
                     ))}
                   </div>
                 </div>
               )}
 
-              {events.filter((e) => !e.isOngoing).length > 0 && (
+              {pastEvents.length > 0 && (
                 <div className="mt-6">
                   <h3 className="text-lg font-semibold text-gray-800 mb-3">Past Events</h3>
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {events.filter((e) => !e.isOngoing).map((event) => (
+                    {pastEvents.map((event) => (
                       <button
                         key={event.id}
                         type="button"
@@ -230,6 +268,7 @@ export default function ManageEvent() {
                           <ArrowUpRight size={18} className="text-gray-600" />
                         </div>
                         <p className="text-lg font-semibold text-gray-900">{event.name}</p>
+                        <p className="mt-2 text-sm text-gray-700">Type: {formatPaymentType(event.paymentRequestType)}</p>
                       </button>
                     ))}
                   </div>
