@@ -23,6 +23,23 @@ export default function User() {
   const [optionalLoading, setOptionalLoading] = useState(false);
   const [optionalError, setOptionalError] = useState("");
 
+  const pendingRequestsWithStatus = pendingRequests
+    .map((request) => {
+      const dueAt = new Date(request.timeToLive).getTime();
+      const isOverdue = Number.isFinite(dueAt) && dueAt < Date.now();
+      return {
+        ...request,
+        computedStatus: isOverdue ? "missed" : request.status,
+      };
+    })
+    .sort((a, b) => {
+      const aDue = new Date(a.timeToLive).getTime();
+      const bDue = new Date(b.timeToLive).getTime();
+      const aSafe = Number.isFinite(aDue) ? aDue : Number.MAX_SAFE_INTEGER;
+      const bSafe = Number.isFinite(bDue) ? bDue : Number.MAX_SAFE_INTEGER;
+      return aSafe - bSafe;
+    });
+
   useEffect(() => {
     if (activeTab !== "pending" || pendingRequests.length > 0) return;
     setPendingLoading(true);
@@ -123,23 +140,25 @@ export default function User() {
             {!pendingLoading && pendingError && (
               <p className="text-center text-red-500 mt-20">{pendingError}</p>
             )}
-            {!pendingLoading && !pendingError && pendingRequests.length === 0 && (
+            {!pendingLoading && !pendingError && pendingRequestsWithStatus.length === 0 && (
               <div className="text-center text-gray-500 text-xl mt-20">
                 No pending transactions
               </div>
             )}
-            {!pendingLoading && !pendingError && pendingRequests.length > 0 && (
+            {!pendingLoading && !pendingError && pendingRequestsWithStatus.length > 0 && (
               <div className="max-w-2xl mx-auto flex flex-col gap-4">
-                {pendingRequests.map((req) => (
+                {pendingRequestsWithStatus.map((req) => (
                   <div key={req.id} className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
                     <div className="flex items-center justify-between mb-3">
                       <span className="font-semibold text-gray-800">&#8377;{req.amount}</span>
                       <span className={`text-xs px-2 py-1 rounded-full font-medium capitalize ${
-                        req.status === "pending"
+                        req.computedStatus === "pending"
                           ? "bg-yellow-100 text-yellow-700"
-                          : "bg-green-100 text-green-700"
+                          : req.computedStatus === "missed"
+                            ? "bg-red-100 text-red-700"
+                            : "bg-green-100 text-green-700"
                       }`}>
-                        {req.status}
+                        {req.computedStatus}
                       </span>
                     </div>
                     <div className="text-sm text-gray-600 space-y-1">

@@ -85,6 +85,22 @@ export async function createOneTimePaymentRequestRecord(paymentRequest) {
   return paymentRequest;
 }
 
+export async function createOneTimePaymentRequestRecords(paymentRequests) {
+  if (!Array.isArray(paymentRequests) || !paymentRequests.length) {
+    return [];
+  }
+
+  await getOneTimePaymentRequestsCollection().insertMany(paymentRequests);
+  return paymentRequests;
+}
+
+export async function listOneTimePaymentRequestsByBatchId(batchId, systemHeadId) {
+  return getOneTimePaymentRequestsCollection()
+    .find({ batchId, createdBySystemHeadId: systemHeadId })
+    .sort({ createdAt: -1 })
+    .toArray();
+}
+
 export async function listOneTimePaymentRequestsByRollNo(rollNo) {
   return getOneTimePaymentRequestsCollection()
     .find({ rollNo })

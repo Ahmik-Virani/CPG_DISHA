@@ -10,6 +10,14 @@ function normalizeRollNoInput(value) {
   return String(value || "").toUpperCase().replace(/\s+/g, "").trim();
 }
 
+function createOneTimeRow(rowId) {
+  return {
+    rowKey: rowId,
+    rollNo: "",
+    amount: "",
+  };
+}
+
 function formatPaymentType(type) {
   if (type === "one_time") {
     return "One-Time";
@@ -35,12 +43,13 @@ export default function EventPage() {
   const [isLoadingPaymentRequest, setIsLoadingPaymentRequest] = useState(true);
   const [showPaymentDetails, setShowPaymentDetails] = useState(false);
   const [paymentForm, setPaymentForm] = useState({
-    rollNo: "",
+    oneTimeRows: [createOneTimeRow(1)],
     banks: [],
     amount: "",
     timeToLive: "",
     isAmountFixed: false,
   });
+  const [nextOneTimeRowId, setNextOneTimeRowId] = useState(2);
   const [paymentFeedback, setPaymentFeedback] = useState({ type: "", message: "" });
   const canShowPaymentActions = Boolean(event?.isOngoing || paymentRequest);
 
@@ -130,12 +139,13 @@ export default function EventPage() {
 
   const resetPaymentForm = () => {
     setPaymentForm({
-      rollNo: "",
+      oneTimeRows: [createOneTimeRow(1)],
       banks: [],
       amount: "",
       timeToLive: "",
       isAmountFixed: false,
     });
+    setNextOneTimeRowId(2);
   };
 
   const openPaymentChooser = () => {
@@ -165,6 +175,43 @@ export default function EventPage() {
     });
   };
 
+  const addOneTimeRow = () => {
+    setPaymentForm((prev) => ({
+      ...prev,
+      oneTimeRows: [...prev.oneTimeRows, createOneTimeRow(nextOneTimeRowId)],
+    }));
+    setNextOneTimeRowId((prev) => prev + 1);
+  };
+
+  const removeOneTimeRow = (rowId) => {
+    setPaymentForm((prev) => {
+      if (prev.oneTimeRows.length <= 1) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        oneTimeRows: prev.oneTimeRows.filter((row) => row.rowKey !== rowId),
+      };
+    });
+  };
+
+  const updateOneTimeRow = (rowId, field, value) => {
+    setPaymentForm((prev) => ({
+      ...prev,
+      oneTimeRows: prev.oneTimeRows.map((row) => {
+        if (row.rowKey !== rowId) {
+          return row;
+        }
+
+        return {
+          ...row,
+          [field]: field === "rollNo" ? normalizeRollNoInput(value) : value,
+        };
+      }),
+    }));
+  };
+
   const handlePaymentSubmit = async (e) => {
     e.preventDefault();
 
@@ -184,20 +231,37 @@ export default function EventPage() {
     };
 
     if (paymentType === "one_time") {
-      const normalizedRollNo = normalizeRollNoInput(paymentForm.rollNo);
-      const amount = Number(paymentForm.amount);
+      const entries = paymentForm.oneTimeRows
+        .map((row) => ({
+          rollNo: normalizeRollNoInput(row.rollNo),
+          amount: Number(row.amount),
+        }))
+        .filter((entry) => entry.rollNo || Number.isFinite(entry.amount));
       const ttlDate = new Date(paymentForm.timeToLive);
 
-      if (!normalizedRollNo || !Number.isFinite(amount) || amount <= 0 || Number.isNaN(ttlDate.getTime())) {
+      const hasInvalidEntry = entries.some(
+        (entry) => !entry.rollNo || !Number.isFinite(entry.amount) || entry.amount <= 0
+      );
+      const uniqueRollNos = new Set(entries.map((entry) => entry.rollNo));
+      const hasDuplicateRollNos = uniqueRollNos.size !== entries.length;
+
+      if (!entries.length || hasInvalidEntry || Number.isNaN(ttlDate.getTime())) {
         setPaymentFeedback({
           type: "error",
-          message: "Roll No, banks, amount, and valid time to live are required.",
+          message: "Each row needs a valid Roll No and amount greater than 0, along with valid time to live.",
         });
         return;
       }
 
-      payload.rollNo = normalizedRollNo;
-      payload.amount = amount;
+      if (hasDuplicateRollNos) {
+        setPaymentFeedback({
+          type: "error",
+          message: "Duplicate roll numbers are not allowed.",
+        });
+        return;
+      }
+
+      payload.entries = entries;
       payload.timeToLive = ttlDate.toISOString();
     }
 
@@ -351,14 +415,38 @@ export default function EventPage() {
                     {paymentRequest.type === "one_time" ? (
                       <>
                         <p>
-                          <span className="font-medium">Roll No:</span> {paymentRequest.rollNo || "-"}
-                        </p>
-                        <p>
-                          <span className="font-medium">Amount:</span> {typeof paymentRequest.amount === "number" ? `\u20B9${paymentRequest.amount}` : "-"}
-                        </p>
-                        <p>
                           <span className="font-medium">Time To Live:</span> {paymentRequest.timeToLive ? new Date(paymentRequest.timeToLive).toLocaleString() : "-"}
                         </p>
+                        <p>
+                          <span className="font-medium">Rows:</span> {Array.isArray(paymentRequest.entries) ? paymentRequest.entries.length : 1}
+                        </p>
+                        <div className="md:col-span-2 overflow-x-auto">
+                          <div className="max-h-105 overflow-y-auto rounded-lg border border-gray-200 bg-white">
+                          <table className="min-w-full text-left text-sm">
+                            <thead className="bg-gray-100 text-gray-700">
+                              <tr>
+                                <th className="border border-gray-200 px-3 py-2">S.No</th>
+                                <th className="border border-gray-200 px-3 py-2">Roll No</th>
+                                <th className="border border-gray-200 px-3 py-2">Amount</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(Array.isArray(paymentRequest.entries) && paymentRequest.entries.length
+                                ? paymentRequest.entries
+                                : [{ rollNo: paymentRequest.rollNo, amount: paymentRequest.amount }]
+                              ).map((entry, index) => (
+                                <tr key={`${entry.rollNo || "row"}-${entry.amount || index}-${index}`}>
+                                  <td className="border border-gray-200 px-3 py-2">{index + 1}</td>
+                                  <td className="border border-gray-200 px-3 py-2">{entry.rollNo || "-"}</td>
+                                  <td className="border border-gray-200 px-3 py-2">
+                                    {typeof entry.amount === "number" ? `\u20B9${entry.amount}` : "-"}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                          </div>
+                        </div>
                       </>
                     ) : null}
 
@@ -427,31 +515,67 @@ export default function EventPage() {
                   </div>
 
                   {paymentType === "one_time" ? (
-                    <div className="mt-4 grid gap-4 md:grid-cols-2">
-                      <label className="flex flex-col gap-1 text-sm">
-                        Roll No
-                        <input
-                          type="text"
-                          value={paymentForm.rollNo}
-                          onChange={(e) => setPaymentForm((prev) => ({ ...prev, rollNo: normalizeRollNoInput(e.target.value) }))}
-                          className="rounded-lg border px-3 py-2"
-                          placeholder="CS24BTECH11001"
-                          required
-                        />
-                      </label>
+                    <div className="mt-4 grid gap-4">
+                      <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+                        <div className="max-h-105 overflow-y-auto">
+                        <table className="min-w-full text-left text-sm">
+                          <thead className="bg-gray-100 text-gray-700">
+                            <tr>
+                              <th className="border-b border-gray-200 px-3 py-2">S.No</th>
+                              <th className="border-b border-gray-200 px-3 py-2">Roll No</th>
+                              <th className="border-b border-gray-200 px-3 py-2">Amount</th>
+                              <th className="border-b border-gray-200 px-3 py-2">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {paymentForm.oneTimeRows.map((row, index) => (
+                              <tr key={row.rowKey}>
+                                <td className="border-b border-gray-200 px-3 py-2">{index + 1}</td>
+                                <td className="border-b border-gray-200 px-3 py-2">
+                                  <input
+                                    type="text"
+                                    value={row.rollNo}
+                                    onChange={(e) => updateOneTimeRow(row.rowKey, "rollNo", e.target.value)}
+                                    className="w-full rounded-lg border px-3 py-2"
+                                    placeholder="CS24BTECH11001"
+                                  />
+                                </td>
+                                <td className="border-b border-gray-200 px-3 py-2">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={row.amount}
+                                    onChange={(e) => updateOneTimeRow(row.rowKey, "amount", e.target.value)}
+                                    className="w-full rounded-lg border px-3 py-2"
+                                  />
+                                </td>
+                                <td className="border-b border-gray-200 px-3 py-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => removeOneTimeRow(row.rowKey)}
+                                    disabled={paymentForm.oneTimeRows.length <= 1}
+                                    className="rounded-lg border px-3 py-1 text-xs disabled:opacity-50"
+                                  >
+                                    Remove
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        </div>
+                      </div>
 
-                      <label className="flex flex-col gap-1 text-sm">
-                        Amount
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={paymentForm.amount}
-                          onChange={(e) => setPaymentForm((prev) => ({ ...prev, amount: e.target.value }))}
-                          className="rounded-lg border px-3 py-2"
-                          required
-                        />
-                      </label>
+                      <div>
+                        <button
+                          type="button"
+                          onClick={addOneTimeRow}
+                          className="rounded-lg border px-3 py-2 text-sm"
+                        >
+                          Add Roll No
+                        </button>
+                      </div>
 
                       <label className="flex flex-col gap-1 text-sm md:col-span-2">
                         Time To Live

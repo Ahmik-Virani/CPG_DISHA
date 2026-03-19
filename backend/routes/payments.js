@@ -3,13 +3,68 @@ import { Router } from "express";
 import { normalizeRollNo, normalizeBanks } from "../utils.js";
 import {
   findEventByIdForSystemHead,
-  createOneTimePaymentRequestRecord,
+  createOneTimePaymentRequestRecords,
   createFixedPaymentRequestRecord,
   findLatestPaymentRequestByEventAndSystemHead,
+  listOneTimePaymentRequestsByBatchId,
 } from "../db.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 
 const router = Router();
+
+function normalizeOneTimeEntries(entriesInput) {
+  if (!Array.isArray(entriesInput)) {
+    return [];
+  }
+
+  return entriesInput
+    .map((entry) => {
+      const rollNo = normalizeRollNo(entry?.rollNo);
+      const amount = Number(entry?.amount);
+      return {
+        rollNo,
+        amount,
+      };
+    })
+    .filter((entry) => entry.rollNo && Number.isFinite(entry.amount) && entry.amount > 0);
+}
+
+function hasDuplicateRollNos(entries) {
+  const unique = new Set();
+  for (const entry of entries) {
+    const key = String(entry.rollNo || "").trim();
+    if (!key) {
+      continue;
+    }
+
+    if (unique.has(key)) {
+      return true;
+    }
+
+    unique.add(key);
+  }
+
+  return false;
+}
+
+async function buildLatestPaymentRequestView(paymentRequest, systemHeadId) {
+  if (!paymentRequest) {
+    return null;
+  }
+
+  if (paymentRequest.type !== "one_time" || !paymentRequest.batchId) {
+    return paymentRequest;
+  }
+
+  const batchRequests = await listOneTimePaymentRequestsByBatchId(paymentRequest.batchId, systemHeadId);
+  return {
+    ...paymentRequest,
+    entries: batchRequests.map((request) => ({
+      rollNo: request.rollNo,
+      amount: request.amount,
+    })),
+  };
+}
 
 router.get(
   "/:eventId/payment-requests/latest",
@@ -25,7 +80,8 @@ router.get(
     }
 
     const paymentRequest = await findLatestPaymentRequestByEventAndSystemHead(eventId, systemHeadId);
-    return res.json({ paymentRequest: paymentRequest || null });
+    const paymentRequestView = await buildLatestPaymentRequestView(paymentRequest, systemHeadId);
+    return res.json({ paymentRequest: paymentRequestView || null });
   }
 );
 
@@ -61,34 +117,51 @@ router.post(
     }
 
     if (type === "one_time") {
-      const rollNo = normalizeRollNo(req.body?.rollNo);
-      const amount = Number(req.body?.amount);
+      const entries = normalizeOneTimeEntries(req.body?.entries);
       const ttlRaw = String(req.body?.timeToLive || "").trim();
       const ttl = new Date(ttlRaw);
 
-      if (!rollNo || !Number.isFinite(amount) || amount <= 0 || !ttlRaw || Number.isNaN(ttl.getTime())) {
+      if (!entries.length || !ttlRaw || Number.isNaN(ttl.getTime())) {
         return res.status(400).json({
-          message: "rollNo, amount, and timeToLive are required for one_time requests",
+          message: "At least one valid rollNo and amount pair with timeToLive is required for one_time requests",
+        });
+      }
+
+      if (hasDuplicateRollNos(entries)) {
+        return res.status(400).json({
+          message: "Duplicate roll numbers are not allowed in one_time requests",
         });
       }
 
       const now = new Date().toISOString();
-      const paymentRequest = {
+      const batchId = crypto.randomUUID();
+      const paymentRequests = entries.map((entry) => ({
         id: crypto.randomUUID(),
+        batchId,
         createdBySystemHeadId: systemHeadId,
         eventId,
         type: "one_time",
-        rollNo,
+        rollNo: entry.rollNo,
         banks,
-        amount,
+        amount: entry.amount,
         status: "pending",
         timeToLive: ttl.toISOString(),
         createdAt: now,
         updatedAt: now,
-      };
+      }));
 
-      await createOneTimePaymentRequestRecord(paymentRequest);
-      return res.status(201).json({ paymentRequest, table: "One_Time_Payment_Request" });
+      await createOneTimePaymentRequestRecords(paymentRequests);
+      return res.status(201).json({
+        paymentRequests,
+        paymentRequest: {
+          ...paymentRequests[0],
+          entries: paymentRequests.map((request) => ({
+            rollNo: request.rollNo,
+            amount: request.amount,
+          })),
+        },
+        table: "One_Time_Payment_Request",
+      });
     }
 
     const isAmountFixed = req.body?.isAmountFixed;
