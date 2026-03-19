@@ -4,6 +4,8 @@ import {
   LogOut,
   ShieldAlert,
   ArrowUpRight,
+  Plus,
+  X,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useState, useEffect, useMemo } from "react";
@@ -18,6 +20,12 @@ export default function Admin() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [isAddMerchantOpen, setIsAddMerchantOpen] = useState(false);
+  const [merchantName, setMerchantName] = useState("");
+  const [merchantEmail, setMerchantEmail] = useState("");
+  const [merchantPassword, setMerchantPassword] = useState("");
+  const [merchantError, setMerchantError] = useState("");
+  const [isSubmittingMerchant, setIsSubmittingMerchant] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -63,6 +71,46 @@ export default function Admin() {
         sh.email?.toLowerCase().includes(q)
     );
   }, [systemHeads, searchQuery]);
+
+  const resetMerchantForm = () => {
+    setMerchantName("");
+    setMerchantEmail("");
+    setMerchantPassword("");
+    setMerchantError("");
+  };
+
+  const handleAddMerchant = async (e) => {
+    e.preventDefault();
+    setMerchantError("");
+
+    if (!merchantName.trim() || !merchantEmail.trim() || !merchantPassword) {
+      setMerchantError("Name, email, and password are required");
+      return;
+    }
+
+    if (merchantPassword.length < 8) {
+      setMerchantError("Password must be at least 8 characters");
+      return;
+    }
+
+    try {
+      setIsSubmittingMerchant(true);
+      await adminApi.createMerchant(token, {
+        name: merchantName.trim(),
+        email: merchantEmail.trim(),
+        password: merchantPassword,
+      });
+
+      const data = await adminApi.listSystemHeads(token);
+      setSystemHeads(Array.isArray(data.users) ? data.users : []);
+      setIsAddMerchantOpen(false);
+      resetMerchantForm();
+    } catch (err) {
+      setMerchantError(err.message || "Failed to add merchant");
+    } finally {
+      setIsSubmittingMerchant(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-sky-50">
@@ -122,15 +170,15 @@ export default function Admin() {
                 <h2 className="text-2xl font-semibold">Manage System Heads</h2>
               </div>
 
-              {/* <button
-                onClick={() => navigate("/admin/addMerchant")}
+              <button
+                onClick={() => setIsAddMerchantOpen(true)}
                 className="bg-black text-white px-4 py-2 rounded-lg flex items-center gap-2 cursor-pointer"
               >
                 <Plus size={16} /> Add Merchant
-              </button> */}
+              </button>
             </div>
 
-            <div className="flex items-center bg-white border rounded-lg px-3 py-2 w-[350px] mb-8">
+            <div className="flex items-center bg-white border rounded-lg px-3 py-2 w-87.5 mb-8">
               <Search size={16} className="text-gray-500" />
               <input
                 className="ml-2 outline-none w-full"
@@ -172,6 +220,69 @@ export default function Admin() {
 
         {activeTab === "fraud" && <div className="text-center text-gray-500 text-xl mt-20">Coming Soon</div>}
       </div>
+
+      {isAddMerchantOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-lg">
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <h3 className="text-lg font-semibold">Onboard Merchant</h3>
+              <button
+                onClick={() => {
+                  setIsAddMerchantOpen(false);
+                  resetMerchantForm();
+                }}
+                className="p-2 rounded-lg hover:bg-gray-100"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddMerchant} className="p-6 space-y-3">
+              <input
+                className="w-full border p-2 rounded"
+                placeholder="Merchant name"
+                value={merchantName}
+                onChange={(e) => setMerchantName(e.target.value)}
+              />
+              <input
+                className="w-full border p-2 rounded"
+                placeholder="merchant@iith.ac.in"
+                value={merchantEmail}
+                onChange={(e) => setMerchantEmail(e.target.value)}
+              />
+              <input
+                type="password"
+                className="w-full border p-2 rounded"
+                placeholder="Temporary password (min 8 chars)"
+                value={merchantPassword}
+                onChange={(e) => setMerchantPassword(e.target.value)}
+              />
+
+              {merchantError ? <p className="text-sm text-red-600">{merchantError}</p> : null}
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddMerchantOpen(false);
+                    resetMerchantForm();
+                  }}
+                  className="border px-4 py-2 rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingMerchant}
+                  className="bg-black text-white px-4 py-2 rounded-lg"
+                >
+                  {isSubmittingMerchant ? "Adding..." : "Add Merchant"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

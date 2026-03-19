@@ -34,6 +34,8 @@ export const authApi = {
 
 export const adminApi = {
   listSystemHeads: (token) => apiRequest("/admin/system-heads", { method: "GET" }, token),
+  createMerchant: (token, data) =>
+    apiRequest("/admin/system-heads", { method: "POST", body: JSON.stringify(data) }, token),
 };
 
 export const eventApi = {

@@ -103,7 +103,7 @@ export default function Login() {
           </button>
         </form>
 
-        {(selectedRole === "user" || selectedRole === "system_head") && (
+        {selectedRole === "user" && (
           <p className="text-sm text-center mt-4 text-gray-600">
             New user? <Link to="/signup" className="text-blue-600">Create account</Link>
           </p>
