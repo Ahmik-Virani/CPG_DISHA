@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { authApi } from "../lib/api";
+import { AUTH_EXPIRED_EVENT, authApi } from "../lib/api";
 
 const AuthContext = createContext(null);
 const TOKEN_KEY = "cpg_token";
@@ -87,6 +87,21 @@ export function AuthProvider({ children }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const handleAuthExpired = () => {
+      clearAuth();
+    };
+
+    window.addEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
+    return () => {
+      window.removeEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
+    };
+  }, [clearAuth]);
 
   const value = {
     token,

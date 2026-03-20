@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CalendarPlus, ArrowLeft, Store, LogOut, ArrowUpRight } from "lucide-react";
+import { CalendarPlus, Store, LogOut, ArrowUpRight, History, PlusCircle } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { eventApi } from "../../lib/api";
@@ -132,15 +132,25 @@ export default function ManageEvent() {
         </div>
       </div>
 
-      <div className="p-6 md:p-8">
-        <button
-          type="button"
-          onClick={() => navigate("/system_head")}
-          className="mb-4 inline-flex items-center gap-2 text-sm text-gray-700 hover:text-black"
-        >
-          <ArrowLeft size={16} /> Back to Dashboard
-        </button>
+      <div className="bg-sky-50 px-6 py-4">
+        <div className="inline-flex bg-gray-200 p-1 rounded-full gap-1 flex-wrap">
+          <button
+            onClick={() => navigate("/system_head/manage-event")}
+            className="flex items-center gap-2 px-5 py-2 rounded-full transition-all duration-200 bg-white shadow text-black"
+          >
+            <PlusCircle size={16} /> Manage Events
+          </button>
 
+          <button
+            onClick={() => navigate("/system_head")}
+            className="flex items-center gap-2 px-5 py-2 rounded-full transition-all duration-200 text-gray-600 hover:text-black"
+          >
+            <History size={16} /> Settlement History
+          </button>
+        </div>
+      </div>
+
+      <div className="p-6 md:p-8">
         <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>

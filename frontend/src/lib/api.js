@@ -1,4 +1,5 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
+export const AUTH_EXPIRED_EVENT = "cpg:auth-expired";
 
 export async function apiRequest(path, options = {}, token) {
   const headers = {
@@ -18,6 +19,16 @@ export async function apiRequest(path, options = {}, token) {
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
+    if (response.status === 401 && token && typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent(AUTH_EXPIRED_EVENT, {
+          detail: {
+            path,
+            message: payload.message || "Invalid or expired token",
+          },
+        })
+      );
+    }
     throw new Error(payload.message || "Request failed");
   }
 

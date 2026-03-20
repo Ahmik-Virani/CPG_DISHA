@@ -30,6 +30,6 @@ export function signToken(user) {
       email: user.email,
     },
     JWT_SECRET,
-    { expiresIn: "1h" }
+    { expiresIn: "15m" }
   );
 }

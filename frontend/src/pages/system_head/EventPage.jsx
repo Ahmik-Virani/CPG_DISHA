@@ -3,30 +3,11 @@ import { ArrowLeft, Store, LogOut } from "lucide-react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { eventApi } from "../../lib/api";
-
-const BANK_OPTIONS = ["ICICI", "SBI", "HDFC"];
-
-function normalizeRollNoInput(value) {
-  return String(value || "").toUpperCase().replace(/\s+/g, "").trim();
-}
-
-function createOneTimeRow(rowId) {
-  return {
-    rowKey: rowId,
-    rollNo: "",
-    amount: "",
-  };
-}
-
-function formatPaymentType(type) {
-  if (type === "one_time") {
-    return "One-Time";
-  }
-  if (type === "fixed") {
-    return "Fixed";
-  }
-  return "Unknown";
-}
+import { createOneTimeRow, normalizeRollNoInput } from "./utils/oneTimeCsv";
+import { BANK_OPTIONS, formatPaymentType } from "./utils/paymentRequestUi";
+import PaymentTypeChooser from "./components/PaymentTypeChooser";
+import PaymentRequestDetails from "./components/PaymentRequestDetails";
+import PaymentRequestForm from "./components/PaymentRequestForm";
 
 export default function EventPage() {
   const navigate = useNavigate();
@@ -210,6 +191,24 @@ export default function EventPage() {
         };
       }),
     }));
+  };
+
+  const importOneTimeRows = (rows) => {
+    const maxRowKey = rows.reduce((max, row) => {
+      const key = Number(row?.rowKey);
+      return Number.isFinite(key) ? Math.max(max, key) : max;
+    }, 0);
+
+    setPaymentForm((prev) => ({
+      ...prev,
+      oneTimeRows: rows,
+    }));
+    setNextOneTimeRowId(maxRowKey + 1);
+  };
+
+  const handlePaymentFormCancel = () => {
+    setPaymentStep("choose");
+    setPaymentFeedback({ type: "", message: "" });
   };
 
   const handlePaymentSubmit = async (e) => {
@@ -402,266 +401,51 @@ export default function EventPage() {
               ) : null}
 
               {paymentRequest && showPaymentDetails ? (
-                <div className="mt-6 rounded-xl border border-gray-200 bg-gray-50 p-4">
-                  <h3 className="text-sm font-semibold text-gray-800">Request Details</h3>
-                  <div className="mt-3 grid gap-2 text-sm text-gray-700 md:grid-cols-2">
-                    <p>
-                      <span className="font-medium">Request Type:</span> {formatPaymentType(paymentRequest.type)}
-                    </p>
-                    <p>
-                      <span className="font-medium">Banks:</span> {Array.isArray(paymentRequest.banks) && paymentRequest.banks.length ? paymentRequest.banks.join(", ") : "-"}
-                    </p>
-
-                    {paymentRequest.type === "one_time" ? (
-                      <>
-                        <p>
-                          <span className="font-medium">Time To Live:</span> {paymentRequest.timeToLive ? new Date(paymentRequest.timeToLive).toLocaleString() : "-"}
-                        </p>
-                        <p>
-                          <span className="font-medium">Rows:</span> {Array.isArray(paymentRequest.entries) ? paymentRequest.entries.length : 1}
-                        </p>
-                        <div className="md:col-span-2 overflow-x-auto">
-                          <div className="max-h-105 overflow-y-auto rounded-lg border border-gray-200 bg-white">
-                          <table className="min-w-full text-left text-sm">
-                            <thead className="bg-gray-100 text-gray-700">
-                              <tr>
-                                <th className="border border-gray-200 px-3 py-2">S.No</th>
-                                <th className="border border-gray-200 px-3 py-2">Roll No</th>
-                                <th className="border border-gray-200 px-3 py-2">Amount</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {(Array.isArray(paymentRequest.entries) && paymentRequest.entries.length
-                                ? paymentRequest.entries
-                                : [{ rollNo: paymentRequest.rollNo, amount: paymentRequest.amount }]
-                              ).map((entry, index) => (
-                                <tr key={`${entry.rollNo || "row"}-${entry.amount || index}-${index}`}>
-                                  <td className="border border-gray-200 px-3 py-2">{index + 1}</td>
-                                  <td className="border border-gray-200 px-3 py-2">{entry.rollNo || "-"}</td>
-                                  <td className="border border-gray-200 px-3 py-2">
-                                    {typeof entry.amount === "number" ? `\u20B9${entry.amount}` : "-"}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                          </div>
-                        </div>
-                      </>
-                    ) : null}
-
-                    {paymentRequest.type === "fixed" ? (
-                      <>
-                        <p>
-                          <span className="font-medium">Is Amount Fixed:</span> {paymentRequest.isAmountFixed ? "Yes" : "No"}
-                        </p>
-                        <p>
-                          <span className="font-medium">Amount:</span>{" "}
-                          {paymentRequest.isAmountFixed && typeof paymentRequest.amount === "number"
-                            ? `\u20B9${paymentRequest.amount}`
-                            : "Variable"}
-                        </p>
-                      </>
-                    ) : null}
-                  </div>
-                </div>
+                <PaymentRequestDetails
+                  paymentRequest={paymentRequest}
+                  formatPaymentType={formatPaymentType}
+                />
               ) : null}
 
               {paymentStep === "choose" ? (
-                <div className="mt-6 rounded-xl border border-gray-200 bg-gray-50 p-4">
-                  <p className="text-sm font-medium text-gray-700">Choose request type</p>
-                  <div className="mt-3 flex flex-wrap gap-3">
-                    <button
-                      type="button"
-                      onClick={() => choosePaymentType("one_time")}
-                      className="rounded-lg border bg-white px-4 py-2"
-                    >
-                      One-Time
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => choosePaymentType("fixed")}
-                      className="rounded-lg border bg-white px-4 py-2"
-                    >
-                      Fixed
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPaymentStep("idle");
-                        setPaymentType("");
-                      }}
-                      className="rounded-lg border px-4 py-2 text-gray-600"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
+                <PaymentTypeChooser
+                  onChoosePaymentType={choosePaymentType}
+                  onCancel={() => {
+                    setPaymentStep("idle");
+                    setPaymentType("");
+                  }}
+                />
               ) : null}
 
               {paymentStep === "form" ? (
-                <form onSubmit={handlePaymentSubmit} className="mt-6 rounded-xl border border-gray-200 bg-gray-50 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-medium text-gray-700">
-                      Create {paymentType === "one_time" ? "One-Time" : "Fixed"} Payment Request
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setPaymentStep("choose")}
-                      className="rounded-lg border px-3 py-1 text-sm"
-                    >
-                      Change Type
-                    </button>
-                  </div>
-
-                  {paymentType === "one_time" ? (
-                    <div className="mt-4 grid gap-4">
-                      <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-                        <div className="max-h-105 overflow-y-auto">
-                        <table className="min-w-full text-left text-sm">
-                          <thead className="bg-gray-100 text-gray-700">
-                            <tr>
-                              <th className="border-b border-gray-200 px-3 py-2">S.No</th>
-                              <th className="border-b border-gray-200 px-3 py-2">Roll No</th>
-                              <th className="border-b border-gray-200 px-3 py-2">Amount</th>
-                              <th className="border-b border-gray-200 px-3 py-2">Action</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {paymentForm.oneTimeRows.map((row, index) => (
-                              <tr key={row.rowKey}>
-                                <td className="border-b border-gray-200 px-3 py-2">{index + 1}</td>
-                                <td className="border-b border-gray-200 px-3 py-2">
-                                  <input
-                                    type="text"
-                                    value={row.rollNo}
-                                    onChange={(e) => updateOneTimeRow(row.rowKey, "rollNo", e.target.value)}
-                                    className="w-full rounded-lg border px-3 py-2"
-                                    placeholder="CS24BTECH11001"
-                                  />
-                                </td>
-                                <td className="border-b border-gray-200 px-3 py-2">
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    value={row.amount}
-                                    onChange={(e) => updateOneTimeRow(row.rowKey, "amount", e.target.value)}
-                                    className="w-full rounded-lg border px-3 py-2"
-                                  />
-                                </td>
-                                <td className="border-b border-gray-200 px-3 py-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => removeOneTimeRow(row.rowKey)}
-                                    disabled={paymentForm.oneTimeRows.length <= 1}
-                                    className="rounded-lg border px-3 py-1 text-xs disabled:opacity-50"
-                                  >
-                                    Remove
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                        </div>
-                      </div>
-
-                      <div>
-                        <button
-                          type="button"
-                          onClick={addOneTimeRow}
-                          className="rounded-lg border px-3 py-2 text-sm"
-                        >
-                          Add Roll No
-                        </button>
-                      </div>
-
-                      <label className="flex flex-col gap-1 text-sm md:col-span-2">
-                        Time To Live
-                        <input
-                          type="datetime-local"
-                          value={paymentForm.timeToLive}
-                          onChange={(e) => setPaymentForm((prev) => ({ ...prev, timeToLive: e.target.value }))}
-                          className="rounded-lg border px-3 py-2"
-                          required
-                        />
-                      </label>
-                    </div>
-                  ) : null}
-
-                  {paymentType === "fixed" ? (
-                    <div className="mt-4 grid gap-4 md:grid-cols-2">
-                      <label className="inline-flex items-center gap-2 text-sm md:col-span-2">
-                        <input
-                          type="checkbox"
-                          checked={paymentForm.isAmountFixed}
-                          onChange={(e) =>
-                            setPaymentForm((prev) => ({
-                              ...prev,
-                              isAmountFixed: e.target.checked,
-                              amount: e.target.checked ? prev.amount : "",
-                            }))
-                          }
-                        />
-                        Fix amount for this request
-                      </label>
-
-                      {paymentForm.isAmountFixed ? (
-                        <label className="flex flex-col gap-1 text-sm md:col-span-2">
-                          Amount
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={paymentForm.amount}
-                            onChange={(e) => setPaymentForm((prev) => ({ ...prev, amount: e.target.value }))}
-                            className="rounded-lg border px-3 py-2"
-                            required
-                          />
-                        </label>
-                      ) : null}
-                    </div>
-                  ) : null}
-
-                  <div className="mt-4">
-                    <p className="text-sm">Banks</p>
-                    <div className="mt-2 flex flex-wrap gap-4">
-                      {BANK_OPTIONS.map((bank) => (
-                        <label key={bank} className="inline-flex items-center gap-2 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={paymentForm.banks.includes(bank)}
-                            onChange={() => toggleBank(bank)}
-                          />
-                          {bank}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  {paymentFeedback.message ? (
-                    <p className={"mt-4 text-sm " + (paymentFeedback.type === "error" ? "text-red-600" : "text-green-700")}>
-                      {paymentFeedback.message}
-                    </p>
-                  ) : null}
-
-                  <div className="mt-4 flex flex-wrap gap-3">
-                    <button type="submit" disabled={isActing} className="rounded-lg bg-indigo-600 px-4 py-2 text-white disabled:opacity-60">
-                      {isActing ? "Submitting..." : "Submit Request"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPaymentStep("choose");
-                        setPaymentFeedback({ type: "", message: "" });
-                      }}
-                      className="rounded-lg border px-4 py-2"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </form>
+                <PaymentRequestForm
+                  paymentType={paymentType}
+                  paymentForm={paymentForm}
+                  isActing={isActing}
+                  paymentFeedback={paymentFeedback}
+                  bankOptions={BANK_OPTIONS}
+                  onSubmit={handlePaymentSubmit}
+                  onChangeType={() => setPaymentStep("choose")}
+                  onAddOneTimeRow={addOneTimeRow}
+                  onRemoveOneTimeRow={removeOneTimeRow}
+                  onUpdateOneTimeRow={updateOneTimeRow}
+                  onImportOneTimeRows={importOneTimeRows}
+                  onTimeToLiveChange={(value) =>
+                    setPaymentForm((prev) => ({ ...prev, timeToLive: value }))
+                  }
+                  onToggleBank={toggleBank}
+                  onFixedAmountToggle={(e) =>
+                    setPaymentForm((prev) => ({
+                      ...prev,
+                      isAmountFixed: e.target.checked,
+                      amount: e.target.checked ? prev.amount : "",
+                    }))
+                  }
+                  onFixedAmountChange={(e) =>
+                    setPaymentForm((prev) => ({ ...prev, amount: e.target.value }))
+                  }
+                  onCancel={handlePaymentFormCancel}
+                />
               ) : null}
             </>
           ) : (
