@@ -1,5 +1,8 @@
+import { useState } from "react";
 import { ArrowLeft, FileText, ReceiptIndianRupee } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
+import { userPaymentApi } from "../../lib/api";
 
 function formatAmount(request) {
   if (request?.isAmountFixed === false) {
@@ -35,7 +38,10 @@ function normalizeStatus(status) {
 export default function PaymentDetails() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { token } = useAuth();
   const request = location.state?.request || null;
+  const [isPaying, setIsPaying] = useState(false);
+  const [payError, setPayError] = useState("");
 
   if (!request) {
     return (
@@ -58,6 +64,33 @@ export default function PaymentDetails() {
   }
 
   const status = normalizeStatus(request.status);
+  const canInitiatePayment = status !== "paid";
+
+  const handlePayNow = async () => {
+    if (!request?.id || !token || !canInitiatePayment) {
+      return;
+    }
+
+    setIsPaying(true);
+    setPayError("");
+
+    try {
+      const data = await userPaymentApi.initiateSale(token, {
+        paymentRequestId: request.id,
+        returnURL: window.location.href,
+      });
+
+      if (!data?.paymentURL) {
+        throw new Error("Payment URL is missing from gateway response");
+      }
+
+      window.location.assign(data.paymentURL);
+    } catch (error) {
+      setPayError(error.message || "Failed to initiate payment");
+    } finally {
+      setIsPaying(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-sky-50 p-6 md:p-8">
@@ -101,13 +134,16 @@ export default function PaymentDetails() {
               </span>
             </div>
           </div>
+          {payError ? <p className="mt-4 text-sm text-red-600">{payError}</p> : null}
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <button
               type="button"
-              className="inline-flex items-center gap-2 rounded-lg bg-black text-white px-5 py-2.5"
+              onClick={handlePayNow}
+              disabled={isPaying || !canInitiatePayment}
+              className="inline-flex items-center gap-2 rounded-lg bg-black text-white px-5 py-2.5 disabled:opacity-60"
             >
-              <ReceiptIndianRupee size={16} /> Pay Now (Static)
+              <ReceiptIndianRupee size={16} /> {isPaying ? "Redirecting..." : "Pay Now"}
             </button>
 
             {status === "paid" ? (

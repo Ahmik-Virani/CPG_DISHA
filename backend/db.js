@@ -115,6 +115,14 @@ export async function listAllFixedPaymentRequests() {
     .toArray();
 }
 
+export async function findOneTimePaymentRequestById(paymentRequestId) {
+  return getOneTimePaymentRequestsCollection().findOne({ id: paymentRequestId });
+}
+
+export async function findFixedPaymentRequestById(paymentRequestId) {
+  return getFixedPaymentRequestsCollection().findOne({ id: paymentRequestId });
+}
+
 export async function listEventsByIds(eventIds) {
   const ids = Array.isArray(eventIds)
     ? [...new Set(eventIds.map((id) => String(id || "").trim()).filter(Boolean))]
