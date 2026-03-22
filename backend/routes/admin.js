@@ -8,6 +8,22 @@ import { normalizeEmail } from "../utils.js";
 
 const router = Router();
 
+async function generateIciciMerchantId() {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const merchantId = String(crypto.randomInt(1000000000, 10000000000));
+    const existing = await getUsersCollection().findOne(
+      { ICICI_merchantId: merchantId },
+      { projection: { _id: 1 } }
+    );
+
+    if (!existing) {
+      return merchantId;
+    }
+  }
+
+  throw new Error("Failed to generate unique ICICI merchant id");
+}
+
 router.get("/system-heads", requireAuth, requireRole("admin"), async (_req, res) => {
   const users = await getUsersCollection()
     .find({ role: "system_head" }, { projection: { passwordHash: 0, _id: 0 } })
@@ -21,6 +37,7 @@ router.post("/system-heads", requireAuth, requireRole("admin"), async (req, res)
   const name = String(req.body?.name || "").trim();
   const email = normalizeEmail(req.body?.email);
   const password = String(req.body?.password || "");
+  const ICICI_merchantId = await generateIciciMerchantId();
 
   if (!name || !email || !password) {
     return res.status(400).json({ message: "Name, email, and password are required" });
@@ -35,6 +52,7 @@ router.post("/system-heads", requireAuth, requireRole("admin"), async (req, res)
     name,
     email,
     role: "system_head",
+    ICICI_merchantId,
     passwordHash: await bcrypt.hash(password, SALT_ROUNDS),
     mustChangePassword: true,
     authProvider: "local",
@@ -46,8 +64,12 @@ router.post("/system-heads", requireAuth, requireRole("admin"), async (req, res)
   try {
     await createUserRecord(user);
   } catch (error) {
-    if (error?.code === 11000) {
+    if (error?.code === 11000 && error?.keyPattern?.email) {
       return res.status(409).json({ message: "Email already exists" });
+    }
+
+    if (error?.code === 11000 && error?.keyPattern?.ICICI_merchantId) {
+      return res.status(409).json({ message: "Merchant ID generation conflict. Please retry." });
     }
     throw error;
   }
