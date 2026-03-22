@@ -164,7 +164,7 @@ router.post("/initiate-sale", requireAuth, requireRole("user"), async (req, res)
   }
 
   const systemHead = await findUserById(paymentRequest.createdBySystemHeadId);
-  if (!systemHead?.ICICI_merchantId) {
+  if (!systemHead?.ICICI_merchantId || !systemHead?.aggregatorID) {
     return res.status(400).json({
       message: "System head merchant configuration is missing for this payment request",
     });
@@ -175,6 +175,7 @@ router.post("/initiate-sale", requireAuth, requireRole("user"), async (req, res)
     currencyCode: 356,
     customerEmailID: user.email,
     merchantId: String(systemHead.ICICI_merchantId),
+    aggregatorID: String(systemHead.aggregatorID),
     merchantTxnNo: generateMerchantTxnNo(),
     payType: 0,
     returnURL,
@@ -188,6 +189,8 @@ router.post("/initiate-sale", requireAuth, requireRole("user"), async (req, res)
     secureHash,
   };
 
+  console.log("[ICICI initiateSale] requestPacket:\n" + JSON.stringify(requestPacket, null, 2));
+
   const initiateSaleResponse = await fetch(ICICI_INITIATE_SALE_URL, {
     method: "POST",
     headers: {
@@ -198,6 +201,7 @@ router.post("/initiate-sale", requireAuth, requireRole("user"), async (req, res)
   });
 
   const responsePacket = await initiateSaleResponse.json().catch(() => ({}));
+  console.log("[ICICI initiateSale] responsePacket:\n" + JSON.stringify(responsePacket, null, 2));
   if (!initiateSaleResponse.ok) {
     return res.status(502).json({
       message: "Failed to initiate sale with ICICI",

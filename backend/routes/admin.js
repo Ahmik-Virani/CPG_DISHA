@@ -10,7 +10,10 @@ const router = Router();
 
 async function generateIciciMerchantId() {
   for (let attempt = 0; attempt < 12; attempt += 1) {
-    const merchantId = String(crypto.randomInt(1000000000, 10000000000));
+    let merchantId = "";
+    for (let index = 0; index < 20; index += 1) {
+      merchantId += String(crypto.randomInt(0, 10));
+    }
     const existing = await getUsersCollection().findOne(
       { ICICI_merchantId: merchantId },
       { projection: { _id: 1 } }
