@@ -11,6 +11,6 @@ export const MONGODB_USER_ID = String(
 export const MONGODB_PWD = String(process.env.MONGODB_PWD || "").trim();
 export const MONGODB_DB_NAME = String(process.env.MONGODB_DB_NAME || "cpg_disha").trim();
 export const ROLES = ["admin", "user", "system_head"];
-export const SELF_SIGNUP_ROLES = ["user"];
+export const SELF_SIGNUP_ROLES = ["user", "system_head"];
 export const SALT_ROUNDS = 10;
 export const PAYMENT_BANKS = ["ICICI", "SBI", "HDFC"];

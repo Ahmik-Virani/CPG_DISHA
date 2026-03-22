@@ -274,6 +274,7 @@ async function connectMongo() {
   await usersCollection.createIndex({ id: 1 }, { unique: true });
   await usersCollection.createIndex({ email: 1 }, { unique: true });
   await usersCollection.createIndex({ role: 1 });
+  await usersCollection.createIndex({ ICICI_merchantId: 1 }, { unique: true, sparse: true });
   await eventsCollection.createIndex({ id: 1 }, { unique: true });
   await eventsCollection.createIndex({ createdBySystemHeadId: 1 });
   await eventsCollection.createIndex({ isOngoing: 1 });
