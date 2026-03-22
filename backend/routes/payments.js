@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { Router } from "express";
-import { normalizeRollNo, normalizeBanks } from "../utils.js";
+import { normalizeRollNo, normalizeBank, normalizeBanks } from "../utils.js";
 import {
   findEventByIdForSystemHead,
   createOneTimePaymentRequestRecords,
@@ -45,6 +45,16 @@ function hasDuplicateRollNos(entries) {
   }
 
   return false;
+}
+
+function resolveSingleBank(inputBank, inputBanks) {
+  const directBank = normalizeBank(inputBank);
+  if (directBank) {
+    return directBank;
+  }
+
+  const normalizedBanks = normalizeBanks(inputBanks);
+  return normalizedBanks[0] || "";
 }
 
 async function buildLatestPaymentRequestView(paymentRequest, systemHeadId) {
@@ -93,7 +103,7 @@ router.post(
     const eventId = String(req.params?.eventId || "").trim();
     const systemHeadId = req.auth.sub;
     const type = String(req.body?.type || "").trim().toLowerCase();
-    const banks = normalizeBanks(req.body?.banks);
+    const bank = resolveSingleBank(req.body?.bank, req.body?.banks);
 
     const event = await findEventByIdForSystemHead(eventId, systemHeadId);
     if (!event) {
@@ -112,8 +122,8 @@ router.post(
       return res.status(400).json({ message: "type must be one of one_time or fixed" });
     }
 
-    if (!banks.length) {
-      return res.status(400).json({ message: "banks must include at least one valid bank" });
+    if (!bank) {
+      return res.status(400).json({ message: "bank must be a valid single bank option" });
     }
 
     if (type === "one_time") {
@@ -142,7 +152,7 @@ router.post(
         eventId,
         type: "one_time",
         rollNo: entry.rollNo,
-        banks,
+        bank,
         amount: entry.amount,
         status: "pending",
         timeToLive: ttl.toISOString(),
@@ -180,7 +190,7 @@ router.post(
       createdBySystemHeadId: systemHeadId,
       eventId,
       type: "fixed",
-      banks,
+      bank,
       isAmountFixed,
       amount: isAmountFixed ? amount : null,
       createdAt: now,

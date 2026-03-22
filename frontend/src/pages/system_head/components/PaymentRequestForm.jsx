@@ -13,7 +13,7 @@ export default function PaymentRequestForm({
   onUpdateOneTimeRow,
   onImportOneTimeRows,
   onTimeToLiveChange,
-  onToggleBank,
+  onSelectBank,
   onFixedAmountToggle,
   onFixedAmountChange,
   onCancel,
@@ -58,14 +58,15 @@ export default function PaymentRequestForm({
             </div>
 
             <div className="rounded-xl border border-gray-200 bg-white p-4">
-              <p className="text-sm font-medium text-gray-700">Banks</p>
+              <p className="text-sm font-medium text-gray-700">Bank</p>
               <div className="mt-2 flex flex-wrap gap-4">
                 {bankOptions.map((bank) => (
                   <label key={bank} className="inline-flex items-center gap-2 text-sm">
                     <input
-                      type="checkbox"
-                      checked={paymentForm.banks.includes(bank)}
-                      onChange={() => onToggleBank(bank)}
+                      type="radio"
+                      name="payment-bank"
+                      checked={paymentForm.bank === bank}
+                      onChange={() => onSelectBank(bank)}
                     />
                     {bank}
                   </label>
@@ -106,14 +107,15 @@ export default function PaymentRequestForm({
 
       {paymentType !== "one_time" ? (
         <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
-          <p className="text-sm font-medium text-gray-700">Banks</p>
+          <p className="text-sm font-medium text-gray-700">Bank</p>
           <div className="mt-2 flex flex-wrap gap-4">
             {bankOptions.map((bank) => (
               <label key={bank} className="inline-flex items-center gap-2 text-sm">
                 <input
-                  type="checkbox"
-                  checked={paymentForm.banks.includes(bank)}
-                  onChange={() => onToggleBank(bank)}
+                  type="radio"
+                      name="payment-bank"
+                      checked={paymentForm.bank === bank}
+                      onChange={() => onSelectBank(bank)}
                 />
                 {bank}
               </label>

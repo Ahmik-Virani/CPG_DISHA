@@ -25,7 +25,7 @@ export default function EventPage() {
   const [showPaymentDetails, setShowPaymentDetails] = useState(false);
   const [paymentForm, setPaymentForm] = useState({
     oneTimeRows: [createOneTimeRow(1)],
-    banks: [],
+    bank: "",
     amount: "",
     timeToLive: "",
     isAmountFixed: false,
@@ -121,7 +121,7 @@ export default function EventPage() {
   const resetPaymentForm = () => {
     setPaymentForm({
       oneTimeRows: [createOneTimeRow(1)],
-      banks: [],
+      bank: "",
       amount: "",
       timeToLive: "",
       isAmountFixed: false,
@@ -146,14 +146,11 @@ export default function EventPage() {
     setPaymentFeedback({ type: "", message: "" });
   };
 
-  const toggleBank = (bank) => {
-    setPaymentForm((prev) => {
-      const hasBank = prev.banks.includes(bank);
-      return {
-        ...prev,
-        banks: hasBank ? prev.banks.filter((item) => item !== bank) : [...prev.banks, bank],
-      };
-    });
+  const selectBank = (bank) => {
+    setPaymentForm((prev) => ({
+      ...prev,
+      bank,
+    }));
   };
 
   const addOneTimeRow = () => {
@@ -219,14 +216,14 @@ export default function EventPage() {
       return;
     }
 
-    if (!paymentForm.banks.length) {
-      setPaymentFeedback({ type: "error", message: "Select at least one bank." });
+    if (!paymentForm.bank) {
+      setPaymentFeedback({ type: "error", message: "Select one bank." });
       return;
     }
 
     const payload = {
       type: paymentType,
-      banks: paymentForm.banks,
+      bank: paymentForm.bank,
     };
 
     if (paymentType === "one_time") {
@@ -433,7 +430,7 @@ export default function EventPage() {
                   onTimeToLiveChange={(value) =>
                     setPaymentForm((prev) => ({ ...prev, timeToLive: value }))
                   }
-                  onToggleBank={toggleBank}
+                  onSelectBank={selectBank}
                   onFixedAmountToggle={(e) =>
                     setPaymentForm((prev) => ({
                       ...prev,

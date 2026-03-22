@@ -12,10 +12,8 @@ export default function PaymentRequestDetails({ paymentRequest, formatPaymentTyp
           <span className="font-medium">Request Type:</span> {formatPaymentType(paymentRequest.type)}
         </p>
         <p>
-          <span className="font-medium">Banks:</span>{" "}
-          {Array.isArray(paymentRequest.banks) && paymentRequest.banks.length
-            ? paymentRequest.banks.join(", ")
-            : "-"}
+          <span className="font-medium">Bank:</span>{" "}
+          {paymentRequest.bank || (Array.isArray(paymentRequest.banks) && paymentRequest.banks.length ? paymentRequest.banks[0] : "-")}
         </p>
 
         {paymentRequest.type === "one_time" ? (
