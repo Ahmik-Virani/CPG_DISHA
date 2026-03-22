@@ -126,7 +126,7 @@ export async function listEventsByIds(eventIds) {
 
   return getEventsCollection()
     .find({ id: { $in: ids } })
-    .project({ _id: 0, id: 1, name: 1 })
+    .project({ _id: 0, id: 1, name: 1, description: 1 })
     .toArray();
 }
 

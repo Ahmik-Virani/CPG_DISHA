@@ -3,6 +3,7 @@ import Login from "./pages/login/Login";
 import Signup from "./pages/login/Signup";
 import Admin from "./pages/admin/Admin";
 import User from "./pages/user/User";
+import PaymentDetails from "./pages/user/PaymentDetails";
 import SystemHead from "./pages/system_head/System_Head";
 import ManageEvent from "./pages/system_head/ManageEvent";
 import EventPage from "./pages/system_head/EventPage";
@@ -45,6 +46,14 @@ function App() {
         element={
           <ProtectedRoute allowedRoles={["user"]}>
             <User />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/user/payment/:paymentId"
+        element={
+          <ProtectedRoute allowedRoles={["user"]}>
+            <PaymentDetails />
           </ProtectedRoute>
         }
       />

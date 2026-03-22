@@ -148,7 +148,12 @@ export default function User() {
             {!pendingLoading && !pendingError && pendingRequestsWithStatus.length > 0 && (
               <div className="max-w-2xl mx-auto flex flex-col gap-4">
                 {pendingRequestsWithStatus.map((req) => (
-                  <div key={req.id} className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                  <Link
+                    key={req.id}
+                    to={"/user/payment/" + (req.id || req.eventId || "details")}
+                    state={{ request: { ...req, status: String(req.status || "").trim().toLowerCase() === "paid" ? "paid" : "pending" } }}
+                    className="block bg-white rounded-xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition-shadow"
+                  >
                     <div className="flex items-center justify-between mb-3">
                       <span className="font-semibold text-gray-800">&#8377;{req.amount}</span>
                       <span className={`text-xs px-2 py-1 rounded-full font-medium capitalize ${
@@ -165,7 +170,7 @@ export default function User() {
                       <p><span className="font-medium">Pay Before:</span> {new Date(req.timeToLive).toLocaleString()}</p>
                       <p><span className="font-medium">Event:</span> {req.eventName || "Unknown Event"}</p>
                     </div>
-                  </div>
+                  </Link>
                 ))}
               </div>
             )}
@@ -188,7 +193,12 @@ export default function User() {
             {!optionalLoading && !optionalError && optionalRequests.length > 0 && (
               <div className="max-w-2xl mx-auto flex flex-col gap-4">
                 {optionalRequests.map((req) => (
-                  <div key={req.id} className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                  <Link
+                    key={req.id}
+                    to={"/user/payment/" + (req.id || req.eventId || "details")}
+                    state={{ request: { ...req, status: String(req.status || "").trim().toLowerCase() === "paid" ? "paid" : "pending" } }}
+                    className="block bg-white rounded-xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition-shadow"
+                  >
                     <div className="flex items-center justify-between mb-3">
                       <span className="font-semibold text-gray-800">
                         {req.isAmountFixed ? `\u20B9${req.amount}` : "Variable Amount"}
@@ -200,7 +210,7 @@ export default function User() {
                     <div className="text-sm text-gray-600 space-y-1">
                       <p><span className="font-medium">Event:</span> {req.eventName || "Unknown Event"}</p>
                     </div>
-                  </div>
+                  </Link>
                 ))}
               </div>
             )}

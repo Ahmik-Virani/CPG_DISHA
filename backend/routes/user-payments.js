@@ -5,14 +5,24 @@ import { normalizeRollNo } from "../utils.js";
 
 const router = Router();
 
-function attachEventNames(requests, events) {
-  const namesByEventId = new Map(events.map((event) => [event.id, event.name || "Unnamed Event"]));
+function attachEventDetails(requests, events) {
+  const detailsByEventId = new Map(
+    events.map((event) => [
+      event.id,
+      {
+        name: event.name || "Unnamed Event",
+        description: event.description || "No event description available",
+      },
+    ])
+  );
+
   return requests.map((request) => ({
     ...request,
-    eventName: namesByEventId.get(request.eventId) || "Unknown Event",
+    eventName: detailsByEventId.get(request.eventId)?.name || "Unknown Event",
+    eventDescription:
+      detailsByEventId.get(request.eventId)?.description || "No event description available",
   }));
 }
-
 
 router.get("/pending", requireAuth, requireRole("user"), async (req, res) => {
   const userId = req.auth.sub;
@@ -28,13 +38,13 @@ router.get("/pending", requireAuth, requireRole("user"), async (req, res) => {
 
   const requests = await listOneTimePaymentRequestsByRollNo(rollNo);
   const events = await listEventsByIds(requests.map((request) => request.eventId));
-  return res.json({ requests: attachEventNames(requests, events) });
+  return res.json({ requests: attachEventDetails(requests, events) });
 });
 
 router.get("/optional", requireAuth, requireRole("user"), async (_req, res) => {
   const requests = await listAllFixedPaymentRequests();
   const events = await listEventsByIds(requests.map((request) => request.eventId));
-  return res.json({ requests: attachEventNames(requests, events) });
+  return res.json({ requests: attachEventDetails(requests, events) });
 });
 
 export default router;
