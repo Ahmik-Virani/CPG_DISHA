@@ -1,6 +1,8 @@
 import dns from "node:dns";
 
 // Use OS/network DNS settings. Forcing public resolvers can break Atlas SRV lookups on restricted networks.
+
+dns.setServers(["8.8.8.8", "8.8.4.4"]);
 dns.setDefaultResultOrder("ipv4first");
 
 import express from "express";
