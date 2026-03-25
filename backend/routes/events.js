@@ -17,8 +17,9 @@ const router = Router();
 
 router.get("/banks/options", requireAuth, requireRole("system_head"), async (_req, res) => {
   const banks = await listBanks();
+  const enabledBanks = banks.filter((bank) => (typeof bank.enabled === "boolean" ? bank.enabled : true));
   return res.json({
-    banks: banks.map((bank) => ({
+    banks: enabledBanks.map((bank) => ({
       id: bank.id,
       name: bank.displayName,
     })),

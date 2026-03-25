@@ -89,6 +89,7 @@ function toBankView(bank) {
     id: bank.id,
     displayName: bank.displayName,
     normalizedDisplayName: bank.normalizedDisplayName,
+    enabled: typeof bank.enabled === "boolean" ? bank.enabled : true,
     fields,
     values: toFieldMap(fields),
     createdAt: bank.createdAt,
@@ -167,6 +168,7 @@ router.post("/banks", requireAuth, requireRole("admin"), async (req, res) => {
     id: crypto.randomUUID(),
     displayName,
     normalizedDisplayName: displayName.toLowerCase(),
+    enabled: true,
     fields,
     createdBy: req.auth.sub,
     createdAt: now,
@@ -222,6 +224,26 @@ router.patch("/banks/:bankId", requireAuth, requireRole("admin"), async (req, re
     }
     throw error;
   }
+});
+
+router.patch("/banks/:bankId/status", requireAuth, requireRole("admin"), async (req, res) => {
+  const bankId = String(req.params?.bankId || "").trim();
+  const enabled = req.body?.enabled;
+
+  if (typeof enabled !== "boolean") {
+    return res.status(400).json({ message: "enabled must be a boolean" });
+  }
+
+  const updated = await updateBankRecordById(bankId, {
+    enabled,
+    updatedAt: new Date().toISOString(),
+  });
+
+  if (!updated) {
+    return res.status(404).json({ message: "Bank not found" });
+  }
+
+  return res.json({ bank: toBankView(updated) });
 });
 
 router.delete("/banks/:bankId", requireAuth, requireRole("admin"), async (req, res) => {

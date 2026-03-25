@@ -52,6 +52,12 @@ export const adminApi = {
     apiRequest("/admin/banks", { method: "POST", body: JSON.stringify(data) }, token),
   updateBank: (token, bankId, data) =>
     apiRequest("/admin/banks/" + bankId, { method: "PATCH", body: JSON.stringify(data) }, token),
+  toggleBankStatus: (token, bankId, enabled) =>
+    apiRequest(
+      "/admin/banks/" + bankId + "/status",
+      { method: "PATCH", body: JSON.stringify({ enabled }) },
+      token
+    ),
   deleteBank: (token, bankId) => apiRequest("/admin/banks/" + bankId, { method: "DELETE" }, token),
 };
 

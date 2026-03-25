@@ -27,9 +27,12 @@ export default function ManageEvent() {
   const [successMessage, setSuccessMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingEvents, setIsLoadingEvents] = useState(true);
+  const [paymentTypeTab, setPaymentTypeTab] = useState("one_time");
   const newEvents = events.filter((e) => e.isOngoing && !e.paymentRequestType);
   const currentEvents = events.filter((e) => e.isOngoing && e.paymentRequestType);
   const pastEvents = events.filter((e) => !e.isOngoing);
+  const currentEventsByType = currentEvents.filter((e) => e.paymentRequestType === paymentTypeTab);
+  const pastEventsByType = pastEvents.filter((e) => e.paymentRequestType === paymentTypeTab);
 
   useEffect(() => {
     let isMounted = true;
@@ -241,11 +244,40 @@ export default function ManageEvent() {
                 </div>
               )}
 
-              {currentEvents.length > 0 && (
+              <div className="mt-6">
+                <div className="inline-flex bg-gray-200 p-1 rounded-full gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentTypeTab("one_time")}
+                    className={
+                      "px-4 py-2 rounded-full text-sm transition-all duration-200 " +
+                      (paymentTypeTab === "one_time"
+                        ? "bg-white shadow text-black"
+                        : "text-gray-600 hover:text-black")
+                    }
+                  >
+                    One-Time Payments
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentTypeTab("fixed")}
+                    className={
+                      "px-4 py-2 rounded-full text-sm transition-all duration-200 " +
+                      (paymentTypeTab === "fixed"
+                        ? "bg-white shadow text-black"
+                        : "text-gray-600 hover:text-black")
+                    }
+                  >
+                    Fixed Payments
+                  </button>
+                </div>
+              </div>
+
+              {currentEventsByType.length > 0 && (
                 <div className="mt-6">
                   <h3 className="text-lg font-semibold text-gray-800 mb-3">Current Events</h3>
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {currentEvents.map((event) => (
+                    {currentEventsByType.map((event) => (
                       <button
                         key={event.id}
                         type="button"
@@ -263,11 +295,11 @@ export default function ManageEvent() {
                 </div>
               )}
 
-              {pastEvents.length > 0 && (
+              {pastEventsByType.length > 0 && (
                 <div className="mt-6">
                   <h3 className="text-lg font-semibold text-gray-800 mb-3">Past Events</h3>
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {pastEvents.map((event) => (
+                    {pastEventsByType.map((event) => (
                       <button
                         key={event.id}
                         type="button"
@@ -282,6 +314,14 @@ export default function ManageEvent() {
                       </button>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {!currentEventsByType.length && !pastEventsByType.length && (
+                <div className="mt-6 border border-dashed border-gray-300 rounded-xl p-8 text-center">
+                  <p className="text-lg font-medium text-gray-700">
+                    No {paymentTypeTab === "one_time" ? "One-Time" : "Fixed"} events found
+                  </p>
                 </div>
               )}
             </>

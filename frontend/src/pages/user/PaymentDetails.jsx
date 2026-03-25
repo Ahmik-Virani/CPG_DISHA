@@ -79,11 +79,6 @@ export default function PaymentDetails() {
       return;
     }
 
-    if (selectedBank.toLowerCase() !== "icici") {
-      setPayError("Not available at the moment");
-      return;
-    }
-
     // Validate custom amount for variable payments
     if (isVariableAmount) {
       const amount = parseFloat(customAmount);

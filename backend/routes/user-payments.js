@@ -6,6 +6,7 @@ import {
   listEventsByIds,
   findOneTimePaymentRequestById,
   findFixedPaymentRequestById,
+  findBankByDisplayName,
 } from "../db.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { normalizeRollNo } from "../utils.js";
@@ -115,8 +116,15 @@ router.post("/initiate-sale", requireAuth, requireRole("user"), async (req, res)
     return res.status(400).json({ message: "Selected bank is not enabled for this payment request" });
   }
 
-  if (selectedBankMatch.toLowerCase() !== "icici") {
+  const selectedBankDoc = await findBankByDisplayName(selectedBankMatch);
+  const isEnabled = typeof selectedBankDoc?.enabled === "boolean" ? selectedBankDoc.enabled : true;
+
+  if (!isEnabled) {
     return res.status(400).json({ message: "Not available at the moment" });
+  }
+
+  if (selectedBankMatch.toLowerCase() !== "icici") {
+    return res.status(400).json({ message: "Yet to be added" });
   }
 
   // Validate and use custom amount for variable payments

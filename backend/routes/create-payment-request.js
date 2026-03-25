@@ -59,10 +59,11 @@ async function resolveEnabledBanks(inputBank, inputBanks) {
   }
 
   const banks = await listBanks();
+  const enabledBanks = banks.filter((bank) => (typeof bank.enabled === "boolean" ? bank.enabled : true));
   const byId = new Map();
   const byName = new Map();
 
-  banks.forEach((bank) => {
+  enabledBanks.forEach((bank) => {
     byId.set(String(bank.id || "").trim(), bank.displayName);
     byName.set(String(bank.normalizedDisplayName || "").trim(), bank.displayName);
   });
