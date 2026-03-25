@@ -59,19 +59,22 @@ export default function PaymentRequestForm({
 
             <div className="rounded-xl border border-gray-200 bg-white p-4">
               <p className="text-sm font-medium text-gray-700">Bank</p>
-              <div className="mt-2 flex flex-wrap gap-4">
-                {bankOptions.map((bank) => (
-                  <label key={bank} className="inline-flex items-center gap-2 text-sm">
-                    <input
-                      type="radio"
-                      name="payment-bank"
-                      checked={paymentForm.bank === bank}
-                      onChange={() => onSelectBank(bank)}
-                    />
-                    {bank}
-                  </label>
-                ))}
-              </div>
+              {bankOptions.length ? (
+                <div className="mt-2 flex flex-wrap gap-4">
+                  {bankOptions.map((bank) => (
+                    <label key={bank} className="inline-flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={Array.isArray(paymentForm.banks) && paymentForm.banks.includes(bank)}
+                        onChange={() => onSelectBank(bank)}
+                      />
+                      {bank}
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-2 text-sm text-amber-700">No banks configured. Please contact admin.</p>
+              )}
             </div>
           </div>
         </>
@@ -108,19 +111,22 @@ export default function PaymentRequestForm({
       {paymentType !== "one_time" ? (
         <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
           <p className="text-sm font-medium text-gray-700">Bank</p>
-          <div className="mt-2 flex flex-wrap gap-4">
-            {bankOptions.map((bank) => (
-              <label key={bank} className="inline-flex items-center gap-2 text-sm">
-                <input
-                  type="radio"
-                      name="payment-bank"
-                      checked={paymentForm.bank === bank}
-                      onChange={() => onSelectBank(bank)}
-                />
-                {bank}
-              </label>
-            ))}
-          </div>
+          {bankOptions.length ? (
+            <div className="mt-2 flex flex-wrap gap-4">
+              {bankOptions.map((bank) => (
+                <label key={bank} className="inline-flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={Array.isArray(paymentForm.banks) && paymentForm.banks.includes(bank)}
+                    onChange={() => onSelectBank(bank)}
+                  />
+                  {bank}
+                </label>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-2 text-sm text-amber-700">No banks configured. Please contact admin.</p>
+          )}
         </div>
       ) : null}
 

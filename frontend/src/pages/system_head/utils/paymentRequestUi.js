@@ -1,5 +1,3 @@
-export const BANK_OPTIONS = ["ICICI", "SBI", "HDFC"];
-
 export function formatPaymentType(type) {
   if (type === "one_time") {
     return "One-Time";

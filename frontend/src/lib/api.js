@@ -47,10 +47,17 @@ export const adminApi = {
   listSystemHeads: (token) => apiRequest("/admin/system-heads", { method: "GET" }, token),
   createMerchant: (token, data) =>
     apiRequest("/admin/system-heads", { method: "POST", body: JSON.stringify(data) }, token),
+  listBanks: (token) => apiRequest("/admin/banks", { method: "GET" }, token),
+  createBank: (token, data) =>
+    apiRequest("/admin/banks", { method: "POST", body: JSON.stringify(data) }, token),
+  updateBank: (token, bankId, data) =>
+    apiRequest("/admin/banks/" + bankId, { method: "PATCH", body: JSON.stringify(data) }, token),
+  deleteBank: (token, bankId) => apiRequest("/admin/banks/" + bankId, { method: "DELETE" }, token),
 };
 
 export const eventApi = {
   listMine: (token) => apiRequest("/events", { method: "GET" }, token),
+  listBankOptions: (token) => apiRequest("/events/banks/options", { method: "GET" }, token),
   getOne: (token, eventId) => apiRequest("/events/" + eventId, { method: "GET" }, token),
   getLatestPaymentRequest: (token, eventId) =>
     apiRequest("/events/" + eventId + "/payment-requests/latest", { method: "GET" }, token),

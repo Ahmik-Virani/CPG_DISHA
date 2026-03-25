@@ -1,6 +1,6 @@
 import dns from "node:dns";
 
-dns.setServers(["8.8.8.8", "8.8.4.4"]);
+// Use OS/network DNS settings. Forcing public resolvers can break Atlas SRV lookups on restricted networks.
 dns.setDefaultResultOrder("ipv4first");
 
 import express from "express";
@@ -9,7 +9,7 @@ import { PORT, JWT_SECRET } from "./config.js";
 import { connectMongoWithRetry } from "./db.js";
 import authRoutes from "./routes/auth.js";
 import eventRoutes from "./routes/events.js";
-import paymentRoutes from "./routes/payments.js";
+import paymentRoutes from "./routes/create-payment-request.js";
 import healthRoutes from "./routes/health.js";
 import adminRoutes from "./routes/admin.js";
 import userPaymentRoutes from "./routes/user-payments.js";

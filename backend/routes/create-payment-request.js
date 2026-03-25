@@ -1,12 +1,13 @@
 import crypto from "node:crypto";
 import { Router } from "express";
-import { normalizeRollNo, normalizeBank, normalizeBanks } from "../utils.js";
+import { normalizeRollNo } from "../utils.js";
 import {
   findEventByIdForSystemHead,
   createOneTimePaymentRequestRecords,
   createFixedPaymentRequestRecord,
   findLatestPaymentRequestByEventAndSystemHead,
   listOneTimePaymentRequestsByBatchId,
+  listBanks,
 } from "../db.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 
@@ -47,14 +48,40 @@ function hasDuplicateRollNos(entries) {
   return false;
 }
 
-function resolveSingleBank(inputBank, inputBanks) {
-  const directBank = normalizeBank(inputBank);
-  if (directBank) {
-    return directBank;
+async function resolveEnabledBanks(inputBank, inputBanks) {
+  const candidates = [
+    String(inputBank || "").trim(),
+    ...(Array.isArray(inputBanks) ? inputBanks.map((entry) => String(entry || "").trim()) : []),
+  ].filter(Boolean);
+
+  if (!candidates.length) {
+    return [];
   }
 
-  const normalizedBanks = normalizeBanks(inputBanks);
-  return normalizedBanks[0] || "";
+  const banks = await listBanks();
+  const byId = new Map();
+  const byName = new Map();
+
+  banks.forEach((bank) => {
+    byId.set(String(bank.id || "").trim(), bank.displayName);
+    byName.set(String(bank.normalizedDisplayName || "").trim(), bank.displayName);
+  });
+
+  const enabled = [];
+  for (const candidate of candidates) {
+    const byIdValue = byId.get(candidate);
+    if (byIdValue) {
+      enabled.push(byIdValue);
+      continue;
+    }
+
+    const byNameValue = byName.get(candidate.toLowerCase());
+    if (byNameValue) {
+      enabled.push(byNameValue);
+    }
+  }
+
+  return [...new Set(enabled)];
 }
 
 async function buildLatestPaymentRequestView(paymentRequest, systemHeadId) {
@@ -103,7 +130,7 @@ router.post(
     const eventId = String(req.params?.eventId || "").trim();
     const systemHeadId = req.auth.sub;
     const type = String(req.body?.type || "").trim().toLowerCase();
-    const bank = resolveSingleBank(req.body?.bank, req.body?.banks);
+    const banks = await resolveEnabledBanks(req.body?.bank, req.body?.banks);
 
     const event = await findEventByIdForSystemHead(eventId, systemHeadId);
     if (!event) {
@@ -122,8 +149,8 @@ router.post(
       return res.status(400).json({ message: "type must be one of one_time or fixed" });
     }
 
-    if (!bank) {
-      return res.status(400).json({ message: "bank must be a valid single bank option" });
+    if (!banks.length) {
+      return res.status(400).json({ message: "At least one valid bank option must be selected" });
     }
 
     if (type === "one_time") {
@@ -152,7 +179,8 @@ router.post(
         eventId,
         type: "one_time",
         rollNo: entry.rollNo,
-        bank,
+        bank: banks[0],
+        banks,
         amount: entry.amount,
         status: "pending",
         timeToLive: ttl.toISOString(),
@@ -190,7 +218,8 @@ router.post(
       createdBySystemHeadId: systemHeadId,
       eventId,
       type: "fixed",
-      bank,
+      bank: banks[0],
+      banks,
       isAmountFixed,
       amount: isAmountFixed ? amount : null,
       createdAt: now,

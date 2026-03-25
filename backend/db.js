@@ -8,6 +8,7 @@ let usersCollection;
 let eventsCollection;
 let fixedPaymentRequestsCollection;
 let oneTimePaymentRequestsCollection;
+let banksCollection;
 let mongoReady = false;
 
 function resolveMongoUri() {
@@ -51,6 +52,15 @@ export function getOneTimePaymentRequestsCollection() {
     throw error;
   }
   return oneTimePaymentRequestsCollection;
+}
+
+export function getBanksCollection() {
+  if (!banksCollection) {
+    const error = new Error("MongoDB is not connected yet");
+    error.status = 503;
+    throw error;
+  }
+  return banksCollection;
 }
 
 export function isMongoReady() {
@@ -121,6 +131,49 @@ export async function findOneTimePaymentRequestById(paymentRequestId) {
 
 export async function findFixedPaymentRequestById(paymentRequestId) {
   return getFixedPaymentRequestsCollection().findOne({ id: paymentRequestId });
+}
+
+export async function listBanks() {
+  return getBanksCollection().find({}, { projection: { _id: 0 } }).sort({ createdAt: -1 }).toArray();
+}
+
+export async function findBankById(bankId) {
+  return getBanksCollection().findOne({ id: bankId }, { projection: { _id: 0 } });
+}
+
+export async function findBankByDisplayName(displayName) {
+  const normalized = String(displayName || "").trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+
+  return getBanksCollection().findOne({ normalizedDisplayName: normalized }, { projection: { _id: 0 } });
+}
+
+export async function createBankRecord(bank) {
+  await getBanksCollection().insertOne(bank);
+  return bank;
+}
+
+export async function updateBankRecordById(bankId, update) {
+  const result = await getBanksCollection().findOneAndUpdate(
+    { id: bankId },
+    { $set: update },
+    {
+      returnDocument: "after",
+      projection: { _id: 0 },
+    }
+  );
+
+  if (!result) {
+    return null;
+  }
+
+  return result.value || result;
+}
+
+export async function deleteBankRecordById(bankId) {
+  return getBanksCollection().deleteOne({ id: bankId });
 }
 
 export async function listEventsByIds(eventIds) {
@@ -277,6 +330,7 @@ async function connectMongo() {
   eventsCollection = db.collection("Events");
   fixedPaymentRequestsCollection = db.collection("Fixed_Payment_Request");
   oneTimePaymentRequestsCollection = db.collection("One_Time_Payment_Request");
+  banksCollection = db.collection("Banks");
   mongoReady = true;
 
   await usersCollection.createIndex({ id: 1 }, { unique: true });
@@ -290,6 +344,8 @@ async function connectMongo() {
   await fixedPaymentRequestsCollection.createIndex({ eventId: 1, createdBySystemHeadId: 1 });
   await oneTimePaymentRequestsCollection.createIndex({ id: 1 }, { unique: true });
   await oneTimePaymentRequestsCollection.createIndex({ eventId: 1, createdBySystemHeadId: 1 });
+  await banksCollection.createIndex({ id: 1 }, { unique: true });
+  await banksCollection.createIndex({ normalizedDisplayName: 1 }, { unique: true });
 }
 
 export async function bootstrapAdmin() {
@@ -327,6 +383,7 @@ export async function connectMongoWithRetry(attempt = 1) {
     eventsCollection = undefined;
     fixedPaymentRequestsCollection = undefined;
     oneTimePaymentRequestsCollection = undefined;
+    banksCollection = undefined;
     const delayMs = Math.min(30000, attempt * 3000);
     console.error(
       "MongoDB connect failed (attempt " + attempt + "). Retrying in " + Math.round(delayMs / 1000) + "s",

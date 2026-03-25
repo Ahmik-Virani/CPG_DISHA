@@ -8,25 +8,6 @@ import { requireAuth } from "../middleware/auth.js";
 
 const router = Router();
 
-async function generateIciciMerchantId() {
-  for (let attempt = 0; attempt < 12; attempt += 1) {
-    let merchantId = "";
-    for (let index = 0; index < 20; index += 1) {
-      merchantId += String(crypto.randomInt(0, 10));
-    }
-    const existing = await getUsersCollection().findOne(
-      { ICICI_merchantId: merchantId },
-      { projection: { _id: 1 } }
-    );
-
-    if (!existing) {
-      return merchantId;
-    }
-  }
-
-  throw new Error("Failed to generate unique ICICI merchant id");
-}
-
 router.post("/login", async (req, res) => {
   const email = normalizeEmail(req.body?.email);
   const password = String(req.body?.password || "");
@@ -54,7 +35,6 @@ router.post("/signup", async (req, res) => {
   const password = String(req.body?.password || "");
   const role = String(req.body?.role || "user").trim();
   const roll_no = role === "user" ? String(req.body?.roll_no || "").trim().toUpperCase() : undefined;
-  const ICICI_merchantId = role === "system_head" ? await generateIciciMerchantId() : undefined;
 
   if (!name || !email || !password) {
     return res.status(400).json({ message: "Name, email, and password are required" });
@@ -78,7 +58,6 @@ router.post("/signup", async (req, res) => {
     email,
     role,
     ...(roll_no && { roll_no }),
-    ...(ICICI_merchantId && { ICICI_merchantId }),
     passwordHash: await bcrypt.hash(password, SALT_ROUNDS),
     mustChangePassword: false,
     authProvider: "local",
@@ -92,10 +71,6 @@ router.post("/signup", async (req, res) => {
   } catch (error) {
     if (error?.code === 11000 && error?.keyPattern?.email) {
       return res.status(409).json({ message: "Email already exists" });
-    }
-
-    if (error?.code === 11000 && error?.keyPattern?.ICICI_merchantId) {
-      return res.status(409).json({ message: "Merchant ID generation conflict. Please retry signup." });
     }
     throw error;
   }

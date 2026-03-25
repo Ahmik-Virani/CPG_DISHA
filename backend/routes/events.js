@@ -7,12 +7,23 @@ import {
   findEventByIdForSystemHead,
   markEventDone,
   deleteEventById,
+  listBanks,
   getLatestPaymentRequestTypeByEventIds,
 } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireRole } from "../middleware/auth.js";
 
 const router = Router();
+
+router.get("/banks/options", requireAuth, requireRole("system_head"), async (_req, res) => {
+  const banks = await listBanks();
+  return res.json({
+    banks: banks.map((bank) => ({
+      id: bank.id,
+      name: bank.displayName,
+    })),
+  });
+});
 
 router.get("/", requireAuth, requireRole("system_head"), async (req, res) => {
   const events = await listEventsBySystemHeadId(req.auth.sub);

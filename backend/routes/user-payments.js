@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import { Router } from "express";
 import {
   findUserById,
@@ -10,15 +9,17 @@ import {
 } from "../db.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { normalizeRollNo } from "../utils.js";
-import {
-  ICICI_HMAC_SECRET,
-  ICICI_HMAC_ALGO,
-  ICICI_INITIATE_SALE_URL,
-  ICICI_AUTH_REDIRECT_URL,
-  ICICI_STATUS_CHECK_URL,
-} from "../config.js";
+import { initiateIciciSale } from "./bank-payment/icici.js";
 
 const router = Router();
+
+function getEnabledBanks(request) {
+  const fromArray = Array.isArray(request?.banks)
+    ? request.banks.map((bank) => String(bank || "").trim()).filter(Boolean)
+    : [];
+  const fallback = String(request?.bank || "").trim();
+  return [...new Set(fromArray.length ? fromArray : fallback ? [fallback] : [])];
+}
 
 function attachEventDetails(requests, events) {
   const detailsByEventId = new Map(
@@ -33,64 +34,11 @@ function attachEventDetails(requests, events) {
 
   return requests.map((request) => ({
     ...request,
+    banks: getEnabledBanks(request),
     eventName: detailsByEventId.get(request.eventId)?.name || "Unknown Event",
     eventDescription:
       detailsByEventId.get(request.eventId)?.description || "No event description available",
   }));
-}
-
-function formatTxnDate(date = new Date()) {
-  const year = String(date.getFullYear());
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-  const seconds = String(date.getSeconds()).padStart(2, "0");
-  return year + month + day + hours + minutes + seconds;
-}
-
-function generateMerchantTxnNo() {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  let output = "";
-  while (output.length < 20) {
-    output += chars[crypto.randomInt(0, chars.length)];
-  }
-  return output;
-}
-
-function buildSecureHashFromSortedValues(packet) {
-  const sortedKeys = Object.keys(packet).sort();
-  const concatenatedValues = sortedKeys.map((key) => String(packet[key] ?? "")).join("");
-
-  return crypto
-    .createHmac(ICICI_HMAC_ALGO || "sha256", ICICI_HMAC_SECRET)
-    .update(concatenatedValues)
-    .digest("hex");
-}
-
-function findTranCtx(payload) {
-  if (!payload || typeof payload !== "object") {
-    return "";
-  }
-
-  if (typeof payload.tranCtx === "string" && payload.tranCtx.trim()) {
-    return payload.tranCtx.trim();
-  }
-
-  if (typeof payload.tranctx === "string" && payload.tranctx.trim()) {
-    return payload.tranctx.trim();
-  }
-
-  for (const value of Object.values(payload)) {
-    if (value && typeof value === "object") {
-      const nested = findTranCtx(value);
-      if (nested) {
-        return nested;
-      }
-    }
-  }
-
-  return "";
 }
 
 async function resolvePayableRequestForUser(paymentRequestId, user) {
@@ -133,6 +81,8 @@ router.get("/optional", requireAuth, requireRole("user"), async (_req, res) => {
 router.post("/initiate-sale", requireAuth, requireRole("user"), async (req, res) => {
   const paymentRequestId = String(req.body?.paymentRequestId || "").trim();
   const returnURL = String(req.body?.returnURL || "").trim();
+  const selectedBankInput = String(req.body?.bank || "").trim();
+  const customAmount = req.body?.customAmount;
 
   if (!paymentRequestId) {
     return res.status(400).json({ message: "paymentRequestId is required" });
@@ -140,10 +90,6 @@ router.post("/initiate-sale", requireAuth, requireRole("user"), async (req, res)
 
   if (!returnURL) {
     return res.status(400).json({ message: "returnURL is required" });
-  }
-
-  if (!ICICI_HMAC_SECRET) {
-    return res.status(500).json({ message: "ICICI_HMAC_SECRET is not configured" });
   }
 
   const user = await findUserById(req.auth.sub);
@@ -156,77 +102,56 @@ router.post("/initiate-sale", requireAuth, requireRole("user"), async (req, res)
     return res.status(404).json({ message: "Payment request not found" });
   }
 
-  const amount = Number(paymentRequest.amount);
-  if (!Number.isFinite(amount) || amount <= 0) {
-    return res.status(400).json({
-      message: "A valid fixed amount is required before initiating payment for this request",
-    });
+  const enabledBanks = getEnabledBanks(paymentRequest);
+  if (!enabledBanks.length) {
+    return res.status(400).json({ message: "No banks are enabled for this payment request" });
   }
 
-  const systemHead = await findUserById(paymentRequest.createdBySystemHeadId);
-  if (!systemHead?.ICICI_merchantId || !systemHead?.aggregatorID) {
-    return res.status(400).json({
-      message: "System head merchant configuration is missing for this payment request",
-    });
+  const selectedBank = selectedBankInput || enabledBanks[0];
+  const selectedBankMatch = enabledBanks.find(
+    (bank) => bank.toLowerCase() === selectedBank.toLowerCase()
+  );
+  if (!selectedBankMatch) {
+    return res.status(400).json({ message: "Selected bank is not enabled for this payment request" });
   }
 
-  const packetWithoutHash = {
-    amount: Number(amount.toFixed(2)),
-    currencyCode: 356,
-    customerEmailID: user.email,
-    merchantId: String(systemHead.ICICI_merchantId),
-    aggregatorID: String(systemHead.aggregatorID),
-    merchantTxnNo: generateMerchantTxnNo(),
-    payType: 0,
-    returnURL,
-    transactionType: "SALE",
-    txnDate: formatTxnDate(),
-  };
-
-  const secureHash = buildSecureHashFromSortedValues(packetWithoutHash);
-  const requestPacket = {
-    ...packetWithoutHash,
-    secureHash,
-  };
-
-  console.log("[ICICI initiateSale] requestPacket:\n" + JSON.stringify(requestPacket, null, 2));
-
-  const initiateSaleResponse = await fetch(ICICI_INITIATE_SALE_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify(requestPacket),
-  });
-
-  const responsePacket = await initiateSaleResponse.json().catch(() => ({}));
-  console.log("[ICICI initiateSale] responsePacket:\n" + JSON.stringify(responsePacket, null, 2));
-  if (!initiateSaleResponse.ok) {
-    return res.status(502).json({
-      message: "Failed to initiate sale with ICICI",
-      upstreamStatus: initiateSaleResponse.status,
-      responsePacket,
-    });
+  if (selectedBankMatch.toLowerCase() !== "icici") {
+    return res.status(400).json({ message: "Not available at the moment" });
   }
 
-  const tranCtx = findTranCtx(responsePacket);
-  if (!tranCtx) {
-    return res.status(502).json({
-      message: "ICICI response did not contain tranCtx",
-      responsePacket,
-    });
+  // Validate and use custom amount for variable payments
+  let finalAmount = paymentRequest.amount;
+  const isVariableAmount = paymentRequest?.isAmountFixed === false;
+
+  if (isVariableAmount) {
+    if (customAmount === undefined || customAmount === null) {
+      return res.status(400).json({ message: "Amount is required for variable payment requests" });
+    }
+
+    const parsedAmount = Number(customAmount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      return res.status(400).json({ message: "Please provide a valid positive amount" });
+    }
+
+    finalAmount = parsedAmount;
   }
 
-  const paymentURL = ICICI_AUTH_REDIRECT_URL + "?tranCtx=" + encodeURIComponent(tranCtx);
-
-  return res.json({
-    paymentURL,
-    tranCtx,
-    requestPacket,
-    responsePacket,
-    statusCheckURL: ICICI_STATUS_CHECK_URL,
-  });
+  try {
+    const paymentGatewayResponse = await initiateIciciSale({
+      amount: finalAmount,
+      returnURL,
+      userEmail: user.email,
+    });
+    return res.json(paymentGatewayResponse);
+  } catch (error) {
+    if (error?.status) {
+      return res.status(error.status).json({
+        message: error.message || "Failed to initiate ICICI payment",
+        ...(error?.details || {}),
+      });
+    }
+    throw error;
+  }
 });
 
 export default router;

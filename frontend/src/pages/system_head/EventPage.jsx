@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { eventApi } from "../../lib/api";
 import { createOneTimeRow, normalizeRollNoInput } from "./utils/oneTimeCsv";
-import { BANK_OPTIONS, formatPaymentType } from "./utils/paymentRequestUi";
+import { formatPaymentType } from "./utils/paymentRequestUi";
 import PaymentTypeChooser from "./components/PaymentTypeChooser";
 import PaymentRequestDetails from "./components/PaymentRequestDetails";
 import PaymentRequestForm from "./components/PaymentRequestForm";
@@ -22,10 +22,11 @@ export default function EventPage() {
   const [paymentType, setPaymentType] = useState("");
   const [paymentRequest, setPaymentRequest] = useState(null);
   const [isLoadingPaymentRequest, setIsLoadingPaymentRequest] = useState(true);
+  const [bankOptions, setBankOptions] = useState([]);
   const [showPaymentDetails, setShowPaymentDetails] = useState(false);
   const [paymentForm, setPaymentForm] = useState({
     oneTimeRows: [createOneTimeRow(1)],
-    bank: "",
+    banks: [],
     amount: "",
     timeToLive: "",
     isAmountFixed: false,
@@ -50,17 +51,25 @@ export default function EventPage() {
         if (isMounted) {
           setIsLoadingPaymentRequest(true);
         }
-        const [eventData, paymentData] = await Promise.all([
+        const [eventData, paymentData, bankData] = await Promise.all([
           eventApi.getOne(token, eventId),
           eventApi.getLatestPaymentRequest(token, eventId),
+          eventApi.listBankOptions(token),
         ]);
         if (isMounted) {
           setEvent(eventData.event || null);
           setPaymentRequest(paymentData.paymentRequest || null);
+          const resolvedBanks = Array.isArray(bankData.banks)
+            ? bankData.banks
+                .map((bank) => String(bank?.name || "").trim())
+                .filter(Boolean)
+            : [];
+          setBankOptions(resolvedBanks);
         }
       } catch (err) {
         if (isMounted) {
           setError(err.message || "Failed to load event");
+          setBankOptions([]);
         }
       } finally {
         if (isMounted) {
@@ -121,7 +130,7 @@ export default function EventPage() {
   const resetPaymentForm = () => {
     setPaymentForm({
       oneTimeRows: [createOneTimeRow(1)],
-      bank: "",
+      banks: [],
       amount: "",
       timeToLive: "",
       isAmountFixed: false,
@@ -149,7 +158,9 @@ export default function EventPage() {
   const selectBank = (bank) => {
     setPaymentForm((prev) => ({
       ...prev,
-      bank,
+      banks: prev.banks.includes(bank)
+        ? prev.banks.filter((item) => item !== bank)
+        : [...prev.banks, bank],
     }));
   };
 
@@ -216,14 +227,14 @@ export default function EventPage() {
       return;
     }
 
-    if (!paymentForm.bank) {
-      setPaymentFeedback({ type: "error", message: "Select one bank." });
+    if (!Array.isArray(paymentForm.banks) || !paymentForm.banks.length) {
+      setPaymentFeedback({ type: "error", message: "Select at least one bank." });
       return;
     }
 
     const payload = {
       type: paymentType,
-      bank: paymentForm.bank,
+      banks: paymentForm.banks,
     };
 
     if (paymentType === "one_time") {
@@ -420,7 +431,7 @@ export default function EventPage() {
                   paymentForm={paymentForm}
                   isActing={isActing}
                   paymentFeedback={paymentFeedback}
-                  bankOptions={BANK_OPTIONS}
+                  bankOptions={bankOptions}
                   onSubmit={handlePaymentSubmit}
                   onChangeType={() => setPaymentStep("choose")}
                   onAddOneTimeRow={addOneTimeRow}

@@ -151,7 +151,12 @@ export default function User() {
                   <Link
                     key={req.id}
                     to={"/user/payment/" + (req.id || req.eventId || "details")}
-                    state={{ request: { ...req, status: String(req.status || "").trim().toLowerCase() === "paid" ? "paid" : "pending" } }}
+                    state={{
+                      request: {
+                        ...req,
+                        status: String(req.status || "").trim().toLowerCase() === "paid" ? "paid" : "pending",
+                      },
+                    }}
                     className="block bg-white rounded-xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition-shadow"
                   >
                     <div className="flex items-center justify-between mb-3">
@@ -196,7 +201,12 @@ export default function User() {
                   <Link
                     key={req.id}
                     to={"/user/payment/" + (req.id || req.eventId || "details")}
-                    state={{ request: { ...req, status: String(req.status || "").trim().toLowerCase() === "paid" ? "paid" : "pending" } }}
+                    state={{
+                      request: {
+                        ...req,
+                        status: String(req.status || "").trim().toLowerCase() === "paid" ? "paid" : "pending",
+                      },
+                    }}
                     className="block bg-white rounded-xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition-shadow"
                   >
                     <div className="flex items-center justify-between mb-3">

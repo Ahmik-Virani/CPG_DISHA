@@ -3,6 +3,11 @@ export default function PaymentRequestDetails({ paymentRequest, formatPaymentTyp
     Array.isArray(paymentRequest.entries) && paymentRequest.entries.length
       ? paymentRequest.entries
       : [{ rollNo: paymentRequest.rollNo, amount: paymentRequest.amount }];
+  const enabledBanks = Array.isArray(paymentRequest.banks) && paymentRequest.banks.length
+    ? paymentRequest.banks
+    : paymentRequest.bank
+      ? [paymentRequest.bank]
+      : [];
 
   return (
     <div className="mt-6 rounded-xl border border-gray-200 bg-gray-50 p-4">
@@ -12,8 +17,8 @@ export default function PaymentRequestDetails({ paymentRequest, formatPaymentTyp
           <span className="font-medium">Request Type:</span> {formatPaymentType(paymentRequest.type)}
         </p>
         <p>
-          <span className="font-medium">Bank:</span>{" "}
-          {paymentRequest.bank || (Array.isArray(paymentRequest.banks) && paymentRequest.banks.length ? paymentRequest.banks[0] : "-")}
+          <span className="font-medium">Enabled Banks:</span>{" "}
+          {enabledBanks.length ? enabledBanks.join(", ") : "-"}
         </p>
 
         {paymentRequest.type === "one_time" ? (

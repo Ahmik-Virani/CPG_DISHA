@@ -42,6 +42,14 @@ export default function PaymentDetails() {
   const request = location.state?.request || null;
   const [isPaying, setIsPaying] = useState(false);
   const [payError, setPayError] = useState("");
+  const [customAmount, setCustomAmount] = useState("");
+  const enabledBanks = Array.isArray(request?.banks) && request.banks.length
+    ? request.banks
+    : request?.bank
+      ? [request.bank]
+      : [];
+  const [selectedBank, setSelectedBank] = useState(enabledBanks[0] || "");
+  const isVariableAmount = request?.isAmountFixed === false;
 
   if (!request) {
     return (
@@ -67,18 +75,40 @@ export default function PaymentDetails() {
   const canInitiatePayment = status !== "paid";
 
   const handlePayNow = async () => {
-    if (!request?.id || !token || !canInitiatePayment) {
+    if (!request?.id || !token || !canInitiatePayment || !selectedBank) {
       return;
+    }
+
+    if (selectedBank.toLowerCase() !== "icici") {
+      setPayError("Not available at the moment");
+      return;
+    }
+
+    // Validate custom amount for variable payments
+    if (isVariableAmount) {
+      const amount = parseFloat(customAmount);
+      if (!customAmount.trim() || !Number.isFinite(amount) || amount <= 0) {
+        setPayError("Please enter a valid amount");
+        return;
+      }
     }
 
     setIsPaying(true);
     setPayError("");
 
     try {
-      const data = await userPaymentApi.initiateSale(token, {
+      const payload = {
         paymentRequestId: request.id,
+        bank: selectedBank,
         returnURL: window.location.href,
-      });
+      };
+
+      // Add custom amount for variable payments
+      if (isVariableAmount && customAmount.trim()) {
+        payload.customAmount = parseFloat(customAmount);
+      }
+
+      const data = await userPaymentApi.initiateSale(token, payload);
 
       if (!data?.paymentURL) {
         throw new Error("Payment URL is missing from gateway response");
@@ -123,6 +153,27 @@ export default function PaymentDetails() {
               <p className="font-medium text-gray-900 mt-1">{formatAmount(request)}</p>
             </div>
 
+            {isVariableAmount && (
+              <div className="rounded-lg bg-gray-50 p-4 border border-gray-100">
+                <label htmlFor="custom-amount" className="text-gray-500">
+                  Enter Amount (₹)
+                </label>
+                <input
+                  id="custom-amount"
+                  type="number"
+                  placeholder="Enter amount in rupees"
+                  value={customAmount}
+                  onChange={(e) => {
+                    setCustomAmount(e.target.value);
+                    setPayError("");
+                  }}
+                  className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  min="1"
+                  step="0.01"
+                />
+              </div>
+            )}
+
             <div className="rounded-lg bg-gray-50 p-4 border border-gray-100">
               <p className="text-gray-500">Status</p>
               <span
@@ -133,6 +184,30 @@ export default function PaymentDetails() {
                 {status}
               </span>
             </div>
+
+            <div className="rounded-lg bg-gray-50 p-4 border border-gray-100">
+              <p className="text-gray-500">Choose Bank</p>
+              {enabledBanks.length ? (
+                <div className="mt-2 flex flex-wrap gap-3">
+                  {enabledBanks.map((bank) => (
+                    <label key={bank} className="inline-flex items-center gap-2 text-sm">
+                      <input
+                        type="radio"
+                        name="payment-bank"
+                        checked={selectedBank === bank}
+                        onChange={() => {
+                          setSelectedBank(bank);
+                          setPayError("");
+                        }}
+                      />
+                      {bank}
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-1 text-sm text-red-600">No enabled banks for this payment request</p>
+              )}
+            </div>
           </div>
           {payError ? <p className="mt-4 text-sm text-red-600">{payError}</p> : null}
 
@@ -140,7 +215,12 @@ export default function PaymentDetails() {
             <button
               type="button"
               onClick={handlePayNow}
-              disabled={isPaying || !canInitiatePayment}
+              disabled={
+                isPaying ||
+                !canInitiatePayment ||
+                !selectedBank ||
+                (isVariableAmount && (!customAmount.trim() || parseFloat(customAmount) <= 0))
+              }
               className="inline-flex items-center gap-2 rounded-lg bg-black text-white px-5 py-2.5 disabled:opacity-60"
             >
               <ReceiptIndianRupee size={16} /> {isPaying ? "Redirecting..." : "Pay Now"}
