@@ -66,7 +66,7 @@ export default function Header({ variant = "modern" }) {
             </div>
             <div>
               <h1 className="font-bold text-gray-900">Indian Institute of Technology Hyderabad</h1>
-              <p className="text-xs bg-gradient-to-r from-orange-500 to-orange-600 bg-clip-text text-transparent font-semibold">Payment Gateway</p>
+              <p className="text-xs bg-gradient-to-r from-orange-500 to-orange-600 bg-clip-text text-transparent font-semibold">Central Payment Gateway</p>
             </div>
           </div>
 
