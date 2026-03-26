@@ -1,9 +1,10 @@
 import {
   Clock,
   History,
-  Store,
   LogOut,
   Layers,
+  Settings,
+  CalendarClock,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
@@ -30,13 +31,12 @@ export default function User() {
       return {
         ...request,
         computedStatus: isOverdue ? "missed" : request.status,
+        dueAt,
       };
     })
     .sort((a, b) => {
-      const aDue = new Date(a.timeToLive).getTime();
-      const bDue = new Date(b.timeToLive).getTime();
-      const aSafe = Number.isFinite(aDue) ? aDue : Number.MAX_SAFE_INTEGER;
-      const bSafe = Number.isFinite(bDue) ? bDue : Number.MAX_SAFE_INTEGER;
+      const aSafe = Number.isFinite(a.dueAt) ? a.dueAt : Number.MAX_SAFE_INTEGER;
+      const bSafe = Number.isFinite(b.dueAt) ? b.dueAt : Number.MAX_SAFE_INTEGER;
       return aSafe - bSafe;
     });
 
@@ -63,140 +63,170 @@ export default function User() {
   }, [activeTab, token]);
 
   return (
-    <div className="min-h-screen bg-sky-50">
-      {/* Navbar */}
-      <div className="flex justify-between items-center px-6 py-4 border-b bg-white">
-        <div className="flex items-center gap-3">
-          <div className="bg-indigo-600 text-white p-2 rounded-lg">
-            <Store size={20} />
-          </div>
-          <div>
-            <h1 className="font-semibold text-lg">IIT Hyderabad Payment Gateway</h1>
-            <p className="text-sm text-gray-500">{user?.email}</p>
-          </div>
-        </div>
+    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-white">
 
-        <div className="flex items-center gap-3">
-          <Link to="/change-password" className="border px-4 py-2 rounded-lg">
-            Change Password
-          </Link>
-          <button
-            onClick={() => {
-              logout();
-              navigate("/");
-            }}
-            className="border px-4 py-2 rounded-lg flex items-center gap-2 cursor-pointer"
-          >
-            <LogOut size={16} /> Logout
-          </button>
+      {/* Navbar */}
+      <header className="bg-white border-b border-gray-100 sticky top-0 z-10">
+        <div className="px-6 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <img src="/iith-logo.png" alt="IITH" className="h-8 object-contain" />
+            <span className="text-sm font-semibold text-gray-800 tracking-tight">IIT Hyderabad Payment Gateway</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <Link
+              to="/change-password"
+              className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+              title="Change Password"
+            >
+              <Settings size={17} />
+            </Link>
+            <button
+              onClick={() => { logout(); navigate("/"); }}
+              className="flex items-center gap-1.5 ml-1 px-3 py-1.5 rounded-lg text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors cursor-pointer"
+            >
+              <LogOut size={15} /> Logout
+            </button>
+          </div>
         </div>
+      </header>
+
+      {/* Greeting */}
+      <div className="px-10 pt-10 pb-2 text-center">
+        <p className="text-3xl font-semibold text-gray-900 tracking-tight">
+          Hello, <span className="text-orange-700">{user?.name || user?.email}</span>
+        </p>
+        <p className="text-gray-400 mt-2 text-lg">Here's your payment overview.</p>
       </div>
 
       {/* Tab Bar */}
-      <div className="bg-sky-50 px-6 py-4">
-        <div className="inline-flex bg-gray-200 p-1 rounded-full gap-1">
+      <div className="flex justify-center px-6 py-5">
+        <div className="inline-flex bg-white border border-gray-200 shadow-sm p-1 rounded-full gap-1">
           <button
             onClick={() => setActiveTab("pending")}
-            className={`flex items-center gap-2 px-5 py-2 rounded-full transition-all duration-200 ${
+            className={`flex items-center gap-2 px-5 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
               activeTab === "pending"
-                ? "bg-white shadow text-black"
-                : "text-gray-600 hover:text-black"
+                ? "bg-orange-700 text-white shadow"
+                : "text-gray-500 hover:text-gray-900"
             }`}
           >
-            <Clock size={16} /> Pending Transactions
+            <Clock size={15} /> Pending Transactions
           </button>
-
           <button
             onClick={() => setActiveTab("optional")}
-            className={`flex items-center gap-2 px-5 py-2 rounded-full transition-all duration-200 ${
+            className={`flex items-center gap-2 px-5 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
               activeTab === "optional"
-                ? "bg-white shadow text-black"
-                : "text-gray-600 hover:text-black"
+                ? "bg-orange-700 text-white shadow"
+                : "text-gray-500 hover:text-gray-900"
             }`}
           >
-            <Layers size={16} /> Optional Transactions
+            <Layers size={15} /> Optional Transactions
           </button>
-
           <button
             onClick={() => setActiveTab("history")}
-            className={`flex items-center gap-2 px-5 py-2 rounded-full transition-all duration-200 ${
+            className={`flex items-center gap-2 px-5 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
               activeTab === "history"
-                ? "bg-white shadow text-black"
-                : "text-gray-600 hover:text-black"
+                ? "bg-orange-700 text-white shadow"
+                : "text-gray-500 hover:text-gray-900"
             }`}
           >
-            <History size={16} /> Transaction History
+            <History size={15} /> Transaction History
           </button>
         </div>
       </div>
 
       {/* Tab Content */}
-      <div className="p-8">
+      <div className="px-6 pb-10">
+
+        {/* Pending */}
         {activeTab === "pending" && (
           <div>
-            {pendingLoading && (
-              <p className="text-center text-gray-400 mt-20">Loading...</p>
-            )}
+            {pendingLoading && <p className="text-center text-gray-400 mt-20">Loading...</p>}
             {!pendingLoading && pendingError && (
               <p className="text-center text-red-500 mt-20">{pendingError}</p>
             )}
             {!pendingLoading && !pendingError && pendingRequestsWithStatus.length === 0 && (
-              <div className="text-center text-gray-500 text-xl mt-20">
-                No pending transactions
+              <div className="text-center text-gray-400 mt-20">
+                <Clock size={40} className="mx-auto mb-3 opacity-30" />
+                <p className="text-lg">No pending transactions</p>
               </div>
             )}
             {!pendingLoading && !pendingError && pendingRequestsWithStatus.length > 0 && (
-              <div className="max-w-2xl mx-auto flex flex-col gap-4">
-                {pendingRequestsWithStatus.map((req) => (
-                  <Link
-                    key={req.id}
-                    to={"/user/payment/" + (req.id || req.eventId || "details")}
-                    state={{
-                      request: {
-                        ...req,
-                        status: String(req.status || "").trim().toLowerCase() === "paid" ? "paid" : "pending",
-                      },
-                    }}
-                    className="block bg-white rounded-xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition-shadow"
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="font-semibold text-gray-800">&#8377;{req.amount}</span>
-                      <span className={`text-xs px-2 py-1 rounded-full font-medium capitalize ${
-                        req.computedStatus === "pending"
-                          ? "bg-yellow-100 text-yellow-700"
-                          : req.computedStatus === "missed"
-                            ? "bg-red-100 text-red-700"
-                            : "bg-green-100 text-green-700"
-                      }`}>
-                        {req.computedStatus}
-                      </span>
-                    </div>
-                    <div className="text-sm text-gray-600 space-y-1">
-                      <p><span className="font-medium">Pay Before:</span> {new Date(req.timeToLive).toLocaleString()}</p>
-                      <p><span className="font-medium">Event:</span> {req.eventName || "Unknown Event"}</p>
-                    </div>
-                  </Link>
-                ))}
+              <div className="max-w-2xl mx-auto flex flex-col gap-3">
+                {pendingRequestsWithStatus.map((req) => {
+                  const hoursLeft = (req.dueAt - Date.now()) / (1000 * 60 * 60);
+                  const isUrgent = req.computedStatus === "pending" && hoursLeft < 24;
+                  const isSoon   = req.computedStatus === "pending" && hoursLeft >= 24 && hoursLeft < 48;
+
+                  return (
+                    <Link
+                      key={req.id}
+                      to={"/user/payment/" + (req.id || req.eventId || "details")}
+                      state={{
+                        request: {
+                          ...req,
+                          status: String(req.status || "").trim().toLowerCase() === "paid" ? "paid" : "pending",
+                        },
+                      }}
+                      className={`block bg-white rounded-xl border-2 p-5 shadow-sm hover:shadow-md active:bg-orange-50 transition-all ${
+                        isUrgent ? "border-red-300 bg-red-50/50" : isSoon ? "border-amber-300" : "border-gray-100"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-lg font-semibold text-gray-800">{req.eventName || "Unknown Event"}</p>
+                          <p className="text-sm text-gray-500 mt-0.5">&#8377;{req.amount}</p>
+                          {req.createdBySystemHeadName && (
+                            <p className="text-xs text-gray-400 mt-0.5">by {req.createdBySystemHeadName}</p>
+                          )}
+                        </div>
+                        <div className="flex flex-col items-end gap-2 shrink-0">
+                          <span className={`text-xs px-2.5 py-1 rounded-full font-medium capitalize ${
+                            req.computedStatus === "pending"
+                              ? "bg-yellow-100 text-yellow-700"
+                              : req.computedStatus === "missed"
+                              ? "bg-red-100 text-red-700"
+                              : "bg-green-100 text-green-700"
+                          }`}>
+                            {req.computedStatus}
+                          </span>
+                          {isUrgent && (
+                            <span className="text-xs text-red-600 font-semibold flex items-center gap-1">
+                              <CalendarClock size={12} /> Due in {Math.ceil(hoursLeft)}h
+                            </span>
+                          )}
+                          {isSoon && (
+                            <span className="text-xs text-amber-600 font-medium flex items-center gap-1">
+                              <CalendarClock size={12} /> Due soon
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-400 mt-3">
+                        Pay before: {new Date(req.timeToLive).toLocaleString()}
+                      </p>
+                    </Link>
+                  );
+                })}
               </div>
             )}
           </div>
         )}
 
+        {/* Optional */}
         {activeTab === "optional" && (
           <div>
-            {optionalLoading && (
-              <p className="text-center text-gray-400 mt-20">Loading...</p>
-            )}
+            {optionalLoading && <p className="text-center text-gray-400 mt-20">Loading...</p>}
             {!optionalLoading && optionalError && (
               <p className="text-center text-red-500 mt-20">{optionalError}</p>
             )}
             {!optionalLoading && !optionalError && optionalRequests.length === 0 && (
-              <div className="text-center text-gray-500 text-xl mt-20">
-                No optional transactions
+              <div className="text-center text-gray-400 mt-20">
+                <Layers size={40} className="mx-auto mb-3 opacity-30" />
+                <p className="text-lg">No optional transactions</p>
               </div>
             )}
             {!optionalLoading && !optionalError && optionalRequests.length > 0 && (
-              <div className="max-w-2xl mx-auto flex flex-col gap-4">
+              <div className="max-w-2xl mx-auto flex flex-col gap-3">
                 {optionalRequests.map((req) => (
                   <Link
                     key={req.id}
@@ -207,18 +237,21 @@ export default function User() {
                         status: String(req.status || "").trim().toLowerCase() === "paid" ? "paid" : "pending",
                       },
                     }}
-                    className="block bg-white rounded-xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition-shadow"
+                    className="block bg-white rounded-xl border-2 border-gray-100 p-5 shadow-sm hover:shadow-md active:bg-orange-50 transition-all"
                   >
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="font-semibold text-gray-800">
-                        {req.isAmountFixed ? `\u20B9${req.amount}` : "Variable Amount"}
-                      </span>
-                      <span className="text-xs px-2 py-1 rounded-full font-medium bg-blue-100 text-blue-700">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-lg font-semibold text-gray-800">{req.eventName || "Unknown Event"}</p>
+                        <p className="text-sm text-gray-500 mt-0.5">
+                          {req.isAmountFixed ? `₹${req.amount}` : "Variable Amount"}
+                        </p>
+                        {req.createdBySystemHeadName && (
+                          <p className="text-xs text-gray-400 mt-0.5">by {req.createdBySystemHeadName}</p>
+                        )}
+                      </div>
+                      <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-yellow-100 text-yellow-700 shrink-0">
                         {req.isAmountFixed ? "Fixed" : "Open"}
                       </span>
-                    </div>
-                    <div className="text-sm text-gray-600 space-y-1">
-                      <p><span className="font-medium">Event:</span> {req.eventName || "Unknown Event"}</p>
                     </div>
                   </Link>
                 ))}
@@ -227,11 +260,14 @@ export default function User() {
           </div>
         )}
 
+        {/* History */}
         {activeTab === "history" && (
-          <div className="text-center text-gray-500 text-xl mt-20">
-            No transaction history
+          <div className="text-center text-gray-400 mt-20">
+            <History size={40} className="mx-auto mb-3 opacity-30" />
+            <p className="text-lg">Transaction history coming soon</p>
           </div>
         )}
+
       </div>
     </div>
   );

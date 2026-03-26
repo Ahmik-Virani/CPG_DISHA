@@ -1,26 +1,26 @@
 export default function PaymentTypeChooser({ onChoosePaymentType, onCancel }) {
   return (
-    <div className="mt-6 rounded-xl border border-gray-200 bg-gray-50 p-4">
-      <p className="text-sm font-medium text-gray-700">Choose request type</p>
-      <div className="mt-3 flex flex-wrap gap-3">
+    <div className="mt-4 border-t border-gray-100 pt-5">
+      <p className="text-sm font-semibold text-gray-700 mb-3">Choose payment request type</p>
+      <div className="flex flex-wrap gap-3">
         <button
           type="button"
           onClick={() => onChoosePaymentType("one_time")}
-          className="rounded-lg border bg-white px-4 py-2"
+          className="px-5 py-2.5 rounded-xl border-2 border-orange-700 bg-orange-700 text-white text-sm font-medium hover:bg-orange-800 transition-colors"
         >
           One-Time
         </button>
         <button
           type="button"
           onClick={() => onChoosePaymentType("fixed")}
-          className="rounded-lg border bg-white px-4 py-2"
+          className="px-5 py-2.5 rounded-xl border-2 border-orange-700 bg-orange-700 text-white text-sm font-medium hover:bg-orange-800 transition-colors"
         >
           Fixed
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-lg border px-4 py-2 text-gray-600"
+          className="px-5 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-500 hover:bg-gray-50 transition-colors"
         >
           Cancel
         </button>
