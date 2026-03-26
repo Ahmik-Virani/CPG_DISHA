@@ -1,14 +1,13 @@
 import {
   Clock,
   History,
-  LogOut,
   Layers,
-  Settings,
   CalendarClock,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { useAuth } from "../../context/AuthContext";
+import Header from "../../components/Header";
 import { userPaymentApi } from "../../lib/api";
 
 export default function User() {
@@ -66,30 +65,7 @@ export default function User() {
     <div className="min-h-screen bg-cover bg-center bg-no-repeat" style={{ backgroundImage: 'url("/orangegrid.jpg")' }}>
       <div className="min-h-screen bg-orange-50/50">
 
-      {/* Navbar */}
-      <header className="bg-white border-b border-gray-100 sticky top-0 z-10">
-        <div className="px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <img src="/iith-logo.png" alt="IITH" className="h-8 object-contain" />
-            <span className="text-sm font-semibold text-gray-800 tracking-tight">IIT Hyderabad Payment Gateway</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <Link
-              to="/change-password"
-              className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-              title="Change Password"
-            >
-              <Settings size={17} />
-            </Link>
-            <button
-              onClick={() => { logout(); navigate("/"); }}
-              className="flex items-center gap-1.5 ml-1 px-3 py-1.5 rounded-lg text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors cursor-pointer"
-            >
-              <LogOut size={15} /> Logout
-            </button>
-          </div>
-        </div>
-      </header>
+      <Header variant="modern" />
 
       {/* Greeting */}
       <div className="px-10 pt-10 pb-2 text-center">

@@ -105,7 +105,7 @@ export default function PaymentRequestForm({
                     onClick={() => onSelectBank(bank)}
                     className={`px-4 py-2 rounded-xl text-sm font-medium border-2 transition-all active:scale-95 ${
                       isSelected
-                        ? "bg-orange-700 border-orange-700 text-white shadow-sm"
+                        ? "bg-orange-400 border-orange-400 text-white shadow-sm"
                         : "bg-white border-gray-200 text-gray-600 hover:border-orange-300 hover:bg-orange-50"
                     }`}
                   >
@@ -132,7 +132,7 @@ export default function PaymentRequestForm({
         <button
           type="submit"
           disabled={isActing}
-          className="px-5 py-2.5 rounded-xl bg-orange-700 text-white text-sm font-medium hover:bg-orange-800 shadow-sm transition-colors disabled:opacity-60"
+          className="px-5 py-2.5 rounded-xl bg-orange-400 text-white text-sm font-medium hover:bg-orange-500 shadow-sm transition-colors disabled:opacity-60"
         >
           {isActing ? "Submitting..." : "Submit Request"}
         </button>

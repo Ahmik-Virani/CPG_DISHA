@@ -1,13 +1,13 @@
 import {
   Store,
-  LogOut,
   ShieldAlert,
   Building2,
 } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { adminApi } from "../../lib/api";
+import Header from "../../components/Header";
 import SystemHeadPage from "./components/SystemHeadPage";
 import BankPage from "./components/BankPage";
 import FraudRulePage from "./components/FraudRulePage";
@@ -281,67 +281,57 @@ export default function Admin() {
   };
 
   return (
-    <div className="min-h-screen bg-sky-50">
-      <div className="flex justify-between items-center px-6 py-4 border-b bg-white">
-        <div className="flex items-center gap-3">
-          <div className="bg-indigo-600 text-white p-2 rounded-lg">
-            <Store size={20} />
-          </div>
-          <div>
-            <h1 className="font-semibold text-lg">IIT Hyderabad Payment Gateway</h1>
-            <p className="text-sm text-gray-500">{user?.role} panel</p>
-          </div>
-        </div>
+    <div className="min-h-screen bg-cover bg-center bg-no-repeat" style={{ backgroundImage: 'url("/orangegrid.jpg")' }}>
+      <div className="min-h-screen bg-orange-50/50">
 
-        <div className="flex items-center gap-3">
-          <Link to="/change-password" className="border px-4 py-2 rounded-lg">Change Password</Link>
-          <button
-            onClick={() => {
-              logout();
-              navigate("/");
-            }}
-            className="border px-4 py-2 rounded-lg flex items-center gap-2 cursor-pointer"
-          >
-            <LogOut size={16} />
-            Logout
-          </button>
-        </div>
+      <Header variant="modern" />
+
+      {/* Greeting */}
+      <div className="px-10 pt-10 pb-2 text-center">
+        <p className="text-3xl font-semibold text-gray-900 tracking-tight">
+          Hello, <span className="text-orange-700">{user?.name || user?.email}</span>
+        </p>
+        <p className="text-gray-400 mt-2 text-lg">Admin Dashboard</p>
       </div>
 
-      <div className="bg-sky-50 px-6 py-4">
-        <div className="inline-flex bg-gray-200 p-1 rounded-full gap-1">
+      {/* Tab Bar */}
+      <div className="flex justify-center px-6 py-5">
+        <div className="inline-flex bg-white border border-gray-200 shadow-sm p-1 rounded-full gap-1">
           <button
             onClick={() => setActiveTab("system_head")}
-            className={`flex items-center gap-2 px-5 py-2 rounded-full transition-all duration-200 ${
-              activeTab === "system_head" ? "bg-white shadow text-black" : "text-gray-600 hover:text-black"
+            className={`flex items-center gap-2 px-5 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+              activeTab === "system_head"
+                ? "bg-orange-300 text-white shadow"
+                : "text-gray-500 hover:text-gray-900"
             }`}
           >
-            <Store size={16} /> System Head
+            <Store size={15} /> System Head
           </button>
-
           <button
             onClick={() => setActiveTab("banks")}
-            className={`flex items-center gap-2 px-5 py-2 rounded-full transition-all duration-200 ${
-              activeTab === "banks" ? "bg-white shadow text-black" : "text-gray-600 hover:text-black"
+            className={`flex items-center gap-2 px-5 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+              activeTab === "banks"
+                ? "bg-orange-300 text-white shadow"
+                : "text-gray-500 hover:text-gray-900"
             }`}
           >
-            <Building2 size={16} /> Manage Banks
+            <Building2 size={15} /> Manage Banks
           </button>
-
           <button
             onClick={() => setActiveTab("fraud")}
-            className={`flex items-center gap-2 px-5 py-2 rounded-full transition-all duration-200 ${
-              activeTab === "fraud" ? "bg-white shadow text-black" : "text-gray-600 hover:text-black"
+            className={`flex items-center gap-2 px-5 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+              activeTab === "fraud"
+                ? "bg-orange-300 text-white shadow"
+                : "text-gray-500 hover:text-gray-900"
             }`}
           >
-            <ShieldAlert size={16} /> Fraud Detection
+            <ShieldAlert size={15} /> Fraud Detection
           </button>
-
-          
         </div>
       </div>
 
-      <div className="p-8">
+      {/* Tab Content */}
+      <div className="px-6 pb-10">
         {activeTab === "system_head" && (
           <SystemHeadPage
             filteredHeads={filteredHeads}
@@ -401,6 +391,7 @@ export default function Admin() {
         onRemovePair={handleRemoveBankPair}
         onDelete={handleDeleteBank}
       />
+    </div>
     </div>
   );
 }

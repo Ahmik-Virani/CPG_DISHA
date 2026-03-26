@@ -1,4 +1,4 @@
-import { Plus } from "lucide-react";
+import { Plus, Edit3, Power, Building2 } from "lucide-react";
 
 export default function BankPage({
   banks,
@@ -18,7 +18,7 @@ export default function BankPage({
 
         <button
           onClick={onOpenAddBank}
-          className="bg-black text-white px-4 py-2 rounded-lg flex items-center gap-2 cursor-pointer"
+          className="bg-orange-400 text-white px-4 py-2 rounded-lg flex items-center gap-2 cursor-pointer hover:bg-orange-500 transition-colors duration-300"
         >
           <Plus size={16} /> Add Bank
         </button>
@@ -33,40 +33,50 @@ export default function BankPage({
           {banks.map((bank) => (
             <div
               key={bank.id}
-              className="bg-white p-6 rounded-2xl shadow-sm hover:shadow-md transition-all duration-200"
+              className="bg-white p-6 rounded-2xl shadow-sm hover:shadow-xl border border-gray-100 hover:border-orange-200 transition-all duration-300 group"
             >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="font-semibold text-lg">{bank.displayName}</h3>
-                  <p
-                    className={
-                      "mt-2 inline-flex rounded-full px-2 py-1 text-xs font-medium " +
-                      (bank.enabled === false ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700")
-                    }
-                  >
-                    {bank.enabled === false ? "Disabled" : "Enabled"}
-                  </p>
+              <div className="flex items-start justify-between gap-4 mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="bg-orange-100 p-2 rounded-lg group-hover:bg-orange-200 transition-colors">
+                    <Building2 size={20} className="text-orange-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-lg text-gray-900">{bank.displayName}</h3>
+                    <p
+                      className={
+                        "mt-1 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium " +
+                        (bank.enabled === false 
+                          ? "bg-red-100 text-red-700" 
+                          : "bg-green-100 text-green-700")
+                      }
+                    >
+                      <div className={`w-2 h-2 rounded-full ${bank.enabled === false ? 'bg-red-500' : 'bg-green-500'}`}></div>
+                      {bank.enabled === false ? "Disabled" : "Enabled"}
+                    </p>
+                  </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => onToggleBankStatus(bank)}
                   className={
-                    "rounded-lg border px-3 py-1.5 text-xs font-medium " +
+                    "inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-all duration-200 hover:shadow-sm " +
                     (bank.enabled === false
-                      ? "border-green-600 text-green-700"
-                      : "border-amber-600 text-amber-700")
+                      ? "border-green-600 text-green-700 hover:bg-green-50"
+                      : "border-amber-600 text-amber-700 hover:bg-amber-50")
                   }
                 >
+                  <Power size={12} />
                   {bank.enabled === false ? "Enable" : "Disable"}
                 </button>
               </div>
 
-              <div className="mt-5 flex justify-end">
+              <div className="flex justify-end gap-2 pt-4 border-t border-gray-100">
                 <button
                   type="button"
                   onClick={() => onOpenEditBank(bank)}
-                  className="rounded-lg border px-3 py-2 text-sm"
+                  className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-colors"
                 >
+                  <Edit3 size={14} />
                   Edit
                 </button>
               </div>
@@ -74,7 +84,8 @@ export default function BankPage({
           ))}
         </div>
       ) : (
-        <div className="border border-dashed border-gray-300 rounded-xl p-8 text-center">
+        <div className="border-2 border-dashed border-orange-200 rounded-xl p-12 text-center bg-orange-50/30">
+          <Building2 size={48} className="mx-auto mb-4 text-orange-400 opacity-60" />
           <p className="text-lg font-medium text-gray-700">No banks found</p>
           <p className="text-sm text-gray-500 mt-1">Add a bank to make it available in payment requests.</p>
         </div>

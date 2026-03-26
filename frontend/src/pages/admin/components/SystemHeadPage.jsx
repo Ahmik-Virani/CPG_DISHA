@@ -17,7 +17,7 @@ export default function SystemHeadPage({
 
         <button
           onClick={onOpenAddMerchant}
-          className="bg-black text-white px-4 py-2 rounded-lg flex items-center gap-2 cursor-pointer"
+          className="bg-orange-400 text-white px-4 py-2 rounded-lg flex items-center gap-2 cursor-pointer hover:bg-orange-500 transition-colors duration-300"
         >
           <Plus size={16} /> Add Merchant
         </button>

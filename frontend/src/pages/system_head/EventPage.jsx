@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, LogOut, Settings } from "lucide-react";
+import { ArrowLeft, FileText } from "lucide-react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import Header from "../../components/Header";
 import { eventApi } from "../../lib/api";
 import { createOneTimeRow, normalizeRollNoInput } from "./utils/oneTimeCsv";
 import { formatPaymentType } from "./utils/paymentRequestUi";
@@ -210,36 +211,18 @@ export default function EventPage() {
   };
 
   return (
-    <div className="min-h-screen bg-orange-50">
+    <div className="min-h-screen bg-cover bg-center bg-no-repeat" style={{ backgroundImage: 'url("/orangegrid.jpg")' }}>
+      <div className="min-h-screen bg-orange-50/50">
 
-      {/* ── Navbar ── */}
-      <header className="bg-white border-b border-gray-100 sticky top-0 z-10">
-        <div className="px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <img src="/iith-logo.png" alt="IITH" className="h-8 object-contain" />
-            <span className="text-sm font-semibold text-gray-800 tracking-tight">IIT Hyderabad Payment Gateway</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <Link to="/change-password" className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors" title="Change Password">
-              <Settings size={17} />
-            </Link>
-            <button
-              onClick={() => { logout(); navigate("/"); }}
-              className="flex items-center gap-1.5 ml-1 px-3 py-1.5 rounded-lg text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors cursor-pointer"
-            >
-              <LogOut size={15} /> Logout
-            </button>
-          </div>
-        </div>
-      </header>
+      <Header variant="modern" />
 
       {/* ── Back nav ── */}
-      <div className="bg-white border-b border-gray-100">
-        <div className="px-6 h-11 flex items-center">
+      <div className="relative px-6 mt-3 z-20">
+        <div className="inline-flex items-center rounded-full bg-white border border-gray-200 px-4 py-2 shadow-sm hover:shadow-md transition-shadow">
           <button
             type="button"
             onClick={() => navigate("/system_head/manage-event")}
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-gray-900"
           >
             <ArrowLeft size={15} /> Back to Events
           </button>
@@ -256,7 +239,7 @@ export default function EventPage() {
           <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
 
             {/* ── Event header — slim ── */}
-            <div className="bg-gradient-to-br from-orange-800 to-orange-700 px-6 py-4 flex items-center justify-between gap-4">
+            <div className="bg-gradient-to-br from-orange-400 to-orange-600 px-6 py-4 flex items-center justify-between gap-4">
               <div>
                 <p className="text-xs text-white/60 uppercase tracking-wide mb-0.5">Event</p>
                 <h2 className="text-lg font-bold text-white leading-tight">{event.name}</h2>
@@ -286,7 +269,7 @@ export default function EventPage() {
                       <button
                         type="button"
                         onClick={() => setShowPaymentDetails((prev) => !prev)}
-                        className="px-4 py-2 rounded-xl text-sm font-medium bg-orange-700 text-white hover:bg-orange-800 transition-colors shadow-sm"
+                        className="px-4 py-2 rounded-xl text-sm font-medium bg-orange-400 text-white hover:bg-orange-500 transition-colors shadow-sm"
                       >
                         {showPaymentDetails ? "Hide Request Details" : "View Request Details"}
                       </button>
@@ -295,7 +278,7 @@ export default function EventPage() {
                         type="button"
                         onClick={openPaymentChooser}
                         disabled={isLoadingPaymentRequest}
-                        className="px-4 py-2 rounded-xl text-sm font-medium bg-orange-700 text-white hover:bg-orange-800 transition-colors shadow-sm disabled:opacity-60"
+                        className="px-4 py-2 rounded-xl text-sm font-medium bg-orange-400 text-white hover:bg-orange-500 transition-colors shadow-sm disabled:opacity-60"
                       >
                         {isLoadingPaymentRequest ? "Loading..." : "Request Payment"}
                       </button>
@@ -377,5 +360,6 @@ export default function EventPage() {
         )}
       </div>
     </div>
+  </div>
   );
 }

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { CalendarPlus, LogOut, ArrowUpRight, History, PlusCircle, Settings } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { CalendarPlus, ArrowUpRight, History, PlusCircle } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import Header from "../../components/Header";
 import { eventApi } from "../../lib/api";
 
 function formatPaymentType(type) {
@@ -74,35 +75,17 @@ export default function ManageEvent() {
   };
 
   return (
-    <div className="min-h-screen bg-orange-50">
+    <div className="min-h-screen bg-cover bg-center bg-no-repeat" style={{ backgroundImage: 'url("/orangegrid.jpg")' }}>
+      <div className="min-h-screen bg-orange-50/50">
 
-      {/* ── Navbar ── */}
-      <header className="bg-white border-b border-gray-100 sticky top-0 z-10">
-        <div className="px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <img src="/iith-logo.png" alt="IITH" className="h-8 object-contain" />
-            <span className="text-sm font-semibold text-gray-800 tracking-tight">IIT Hyderabad Payment Gateway</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <Link to="/change-password" className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors" title="Change Password">
-              <Settings size={17} />
-            </Link>
-            <button
-              onClick={() => { logout(); navigate("/"); }}
-              className="flex items-center gap-1.5 ml-1 px-3 py-1.5 rounded-lg text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors cursor-pointer"
-            >
-              <LogOut size={15} /> Logout
-            </button>
-          </div>
-        </div>
-      </header>
+      <Header variant="modern" />
 
       {/* ── Page nav tabs ── */}
       <div className="flex justify-center px-6 py-5">
         <div className="inline-flex bg-white border border-gray-200 shadow-sm p-1 rounded-full gap-1">
           <button
             onClick={() => navigate("/system_head/manage-event")}
-            className="flex items-center gap-2 px-5 py-2 rounded-full text-sm font-medium bg-orange-700 text-white shadow transition-all duration-200"
+            className="flex items-center gap-2 px-5 py-2 rounded-full text-sm font-medium bg-orange-300 text-white shadow transition-all duration-200"
           >
             <PlusCircle size={15} /> Manage Events
           </button>
@@ -128,7 +111,7 @@ export default function ManageEvent() {
             <button
               type="button"
               onClick={handleCreateClick}
-              className="inline-flex items-center justify-center gap-2 bg-orange-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-orange-800 transition-colors shadow-sm"
+              className="inline-flex items-center justify-center gap-2 bg-orange-400 text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-orange-500 transition-colors shadow-sm"
             >
               <CalendarPlus size={16} /> Create Event
             </button>
@@ -163,7 +146,7 @@ export default function ManageEvent() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="bg-orange-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-orange-800 transition-colors disabled:opacity-60"
+                  className="bg-orange-400 text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-orange-500 transition-colors disabled:opacity-60"
                 >
                   {isSubmitting ? "Creating..." : "Create Event"}
                 </button>
@@ -216,7 +199,7 @@ export default function ManageEvent() {
                       onClick={() => setPaymentTypeTab("one_time")}
                       className={`px-3.5 py-1 rounded-full text-xs font-medium transition-all duration-200 ${
                         paymentTypeTab === "one_time"
-                          ? "bg-orange-700 text-white shadow"
+                          ? "bg-orange-400 text-white shadow"
                           : "text-gray-500 hover:text-gray-900"
                       }`}
                     >
@@ -227,7 +210,7 @@ export default function ManageEvent() {
                       onClick={() => setPaymentTypeTab("fixed")}
                       className={`px-3.5 py-1 rounded-full text-xs font-medium transition-all duration-200 ${
                         paymentTypeTab === "fixed"
-                          ? "bg-orange-700 text-white shadow"
+                          ? "bg-orange-400 text-white shadow"
                           : "text-gray-500 hover:text-gray-900"
                       }`}
                     >
@@ -290,6 +273,7 @@ export default function ManageEvent() {
             </div>
           )}
         </div>
+      </div>
       </div>
     </div>
   );

@@ -6,14 +6,14 @@ export default function PaymentTypeChooser({ onChoosePaymentType, onCancel }) {
         <button
           type="button"
           onClick={() => onChoosePaymentType("one_time")}
-          className="px-5 py-2.5 rounded-xl border-2 border-orange-700 bg-orange-700 text-white text-sm font-medium hover:bg-orange-800 transition-colors"
+          className="px-5 py-2.5 rounded-xl border-2 border-orange-400 bg-orange-400 text-white text-sm font-medium hover:bg-orange-500 transition-colors"
         >
           One-Time
         </button>
         <button
           type="button"
           onClick={() => onChoosePaymentType("fixed")}
-          className="px-5 py-2.5 rounded-xl border-2 border-orange-700 bg-orange-700 text-white text-sm font-medium hover:bg-orange-800 transition-colors"
+          className="px-5 py-2.5 rounded-xl border-2 border-orange-400 bg-orange-400 text-white text-sm font-medium hover:bg-orange-500 transition-colors"
         >
           Fixed
         </button>

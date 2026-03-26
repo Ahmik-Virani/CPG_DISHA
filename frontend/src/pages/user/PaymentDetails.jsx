@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { ArrowLeft, FileText, ReceiptIndianRupee, LogOut, Settings } from "lucide-react";
+import { ArrowLeft, FileText, ReceiptIndianRupee } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import Header from "../../components/Header";
 import { userPaymentApi } from "../../lib/api";
 
 function formatAmount(request) {
@@ -108,30 +109,14 @@ export default function PaymentDetails() {
     <div className="min-h-screen bg-cover bg-center bg-no-repeat" style={{ backgroundImage: 'url("/orangegrid.jpg")' }}>
       <div className="min-h-screen bg-orange-50/50">
 
-      {/* ── Site header ── */}
-      <header className="bg-white border-b border-gray-100 sticky top-0 z-10">
-        <div className="px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <img src="/iith-logo.png" alt="IITH" className="h-8 object-contain" />
-            <span className="text-sm font-semibold text-gray-800 tracking-tight">IIT Hyderabad Payment Gateway</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => { logout(); navigate('/'); }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors cursor-pointer"
-            >
-              <LogOut size={15} /> Logout
-            </button>
-          </div>
-        </div>
-      </header>
+      <Header variant="modern" />
 
       {/* ── Back link ── */}
-      <div className="bg-white/75 border-b border-gray-100">
-        <div className=" px-6 h-12 flex items-center">
+      <div className="relative px-6 mt-3 z-20">
+        <div className="inline-flex items-center rounded-full bg-white border border-gray-200 px-4 py-2 shadow-sm hover:shadow-md transition-shadow">
           <Link
             to="/user"
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-gray-900"
           >
             <ArrowLeft size={15} /> Back to Transactions
           </Link>
@@ -254,7 +239,7 @@ export default function PaymentDetails() {
                 !selectedBank ||
                 (isVariableAmount && (!customAmount.trim() || parseFloat(customAmount) <= 0))
               }
-              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 text-white px-6 py-3.5 font-semibold text-base shadow-md hover:bg-orange-800 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:shadow-md transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-md"
+              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-orange-400 text-white px-6 py-3.5 font-semibold text-base shadow-md hover:bg-orange-500 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:shadow-md transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-md"
             >
               <ReceiptIndianRupee size={18} />
               {isPaying ? "Redirecting to bank..." : "Pay Now"}
