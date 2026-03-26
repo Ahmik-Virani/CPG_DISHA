@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowLeft, FileText, ReceiptIndianRupee } from "lucide-react";
+import { ArrowLeft, FileText, ReceiptIndianRupee, LogOut, Settings } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { userPaymentApi } from "../../lib/api";
@@ -32,7 +32,7 @@ function normalizeStatus(status) {
 export default function PaymentDetails() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { token } = useAuth();
+  const { token, logout } = useAuth();
   const request = location.state?.request || null;
   const [isPaying, setIsPaying] = useState(false);
   const [payError, setPayError] = useState("");
@@ -105,11 +105,30 @@ export default function PaymentDetails() {
   };
 
   return (
-    <div className="min-h-screen bg-orange-50">
+    <div className="min-h-screen bg-cover bg-center bg-no-repeat" style={{ backgroundImage: 'url("/orangegrid.jpg")' }}>
+      <div className="min-h-screen bg-orange-50/50">
 
-      {/* ── Sticky back nav ── */}
-      <div className="sticky top-0 z-10 bg-white/75 backdrop-blur-md border-b border-gray-100">
-        <div className="max-w-xl mx-auto px-6 h-12 flex items-center">
+      {/* ── Site header ── */}
+      <header className="bg-white border-b border-gray-100 sticky top-0 z-10">
+        <div className="px-6 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <img src="/iith-logo.png" alt="IITH" className="h-8 object-contain" />
+            <span className="text-sm font-semibold text-gray-800 tracking-tight">IIT Hyderabad Payment Gateway</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => { logout(); navigate('/'); }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors cursor-pointer"
+            >
+              <LogOut size={15} /> Logout
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* ── Back link ── */}
+      <div className="bg-white/75 border-b border-gray-100">
+        <div className=" px-6 h-12 flex items-center">
           <Link
             to="/user"
             className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors"
@@ -127,13 +146,13 @@ export default function PaymentDetails() {
                Gradient: same hue family (orange-800 → orange-600), cohesive not jarring
                Reading flow: context → amount → status + deadline
           ── */}
-          <div className="bg-gradient-to-br from-orange-800 to-orange-700 px-6 pt-5 pb-4">
+          <div className="bg-gradient-to-br from-orange-500 to-orange-300 px-6 pt-5 pb-4">
 
-            {/* Context — small, muted */}
-            <p className="text-xs font-medium text-white/75 tracking-wide uppercase">
+            {/* Context — more prominent */}
+            <p className="text-sm font-semibold text-white/90 tracking-wide uppercase">
               {request.eventName || "Payment"}
               {request.eventDescription && (
-                <span className="normal-case text-white/60"> · {request.eventDescription}</span>
+                <span className="normal-case text-white/80"> · {request.eventDescription}</span>
               )}
             </p>
 
@@ -208,7 +227,7 @@ export default function PaymentDetails() {
                       onClick={() => { setSelectedBank(bank); setPayError(""); }}
                       className={`px-5 py-2.5 rounded-xl text-sm font-medium border-2 transition-all active:scale-[0.97] ${
                         selectedBank === bank
-                          ? "bg-orange-700 border-orange-700 text-white shadow-md"
+                          ? "bg-orange-400 border-orange-400 text-white shadow-md"
                           : "bg-white border-gray-200 text-gray-600 hover:border-orange-300 hover:bg-orange-50 hover:text-orange-700"
                       }`}
                     >
@@ -235,7 +254,7 @@ export default function PaymentDetails() {
                 !selectedBank ||
                 (isVariableAmount && (!customAmount.trim() || parseFloat(customAmount) <= 0))
               }
-              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-orange-700 text-white px-6 py-3.5 font-semibold text-base shadow-md hover:bg-orange-800 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:shadow-md transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-md"
+              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 text-white px-6 py-3.5 font-semibold text-base shadow-md hover:bg-orange-800 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:shadow-md transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-md"
             >
               <ReceiptIndianRupee size={18} />
               {isPaying ? "Redirecting to bank..." : "Pay Now"}
@@ -253,6 +272,7 @@ export default function PaymentDetails() {
           </div>
         </div>
       </div>
+    </div>
     </div>
   );
 }

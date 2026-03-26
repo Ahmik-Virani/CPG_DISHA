@@ -63,7 +63,8 @@ export default function User() {
   }, [activeTab, token]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-white">
+    <div className="min-h-screen bg-cover bg-center bg-no-repeat" style={{ backgroundImage: 'url("/orangegrid.jpg")' }}>
+      <div className="min-h-screen bg-orange-50/50">
 
       {/* Navbar */}
       <header className="bg-white border-b border-gray-100 sticky top-0 z-10">
@@ -105,7 +106,7 @@ export default function User() {
             onClick={() => setActiveTab("pending")}
             className={`flex items-center gap-2 px-5 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
               activeTab === "pending"
-                ? "bg-orange-700 text-white shadow"
+                ? "bg-orange-300 text-white shadow"
                 : "text-gray-500 hover:text-gray-900"
             }`}
           >
@@ -115,7 +116,7 @@ export default function User() {
             onClick={() => setActiveTab("optional")}
             className={`flex items-center gap-2 px-5 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
               activeTab === "optional"
-                ? "bg-orange-700 text-white shadow"
+                ? "bg-orange-300 text-white shadow"
                 : "text-gray-500 hover:text-gray-900"
             }`}
           >
@@ -125,7 +126,7 @@ export default function User() {
             onClick={() => setActiveTab("history")}
             className={`flex items-center gap-2 px-5 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
               activeTab === "history"
-                ? "bg-orange-700 text-white shadow"
+                ? "bg-orange-300 text-white shadow"
                 : "text-gray-500 hover:text-gray-900"
             }`}
           >
@@ -151,7 +152,7 @@ export default function User() {
               </div>
             )}
             {!pendingLoading && !pendingError && pendingRequestsWithStatus.length > 0 && (
-              <div className="max-w-2xl mx-auto flex flex-col gap-3">
+              <div className="max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {pendingRequestsWithStatus.map((req) => {
                   const hoursLeft = (req.dueAt - Date.now()) / (1000 * 60 * 60);
                   const isUrgent = req.computedStatus === "pending" && hoursLeft < 24;
@@ -168,7 +169,7 @@ export default function User() {
                         },
                       }}
                       className={`block bg-white rounded-xl border-2 p-5 shadow-sm hover:shadow-md active:bg-orange-50 transition-all ${
-                        isUrgent ? "border-red-300 bg-red-50/50" : isSoon ? "border-amber-300" : "border-gray-100"
+                        isUrgent ? "border-orange-300 bg-orange-50/60" : isSoon ? "border-amber-300" : "border-gray-100"
                       }`}
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -182,15 +183,15 @@ export default function User() {
                         <div className="flex flex-col items-end gap-2 shrink-0">
                           <span className={`text-xs px-2.5 py-1 rounded-full font-medium capitalize ${
                             req.computedStatus === "pending"
-                              ? "bg-yellow-100 text-yellow-700"
+                              ? "bg-orange-100 text-orange-700"
                               : req.computedStatus === "missed"
-                              ? "bg-red-100 text-red-700"
+                              ? "bg-amber-100 text-amber-700"
                               : "bg-green-100 text-green-700"
                           }`}>
                             {req.computedStatus}
                           </span>
                           {isUrgent && (
-                            <span className="text-xs text-red-600 font-semibold flex items-center gap-1">
+                            <span className="text-xs text-orange-600 font-semibold flex items-center gap-1">
                               <CalendarClock size={12} /> Due in {Math.ceil(hoursLeft)}h
                             </span>
                           )}
@@ -226,7 +227,7 @@ export default function User() {
               </div>
             )}
             {!optionalLoading && !optionalError && optionalRequests.length > 0 && (
-              <div className="max-w-2xl mx-auto flex flex-col gap-3">
+              <div className="max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {optionalRequests.map((req) => (
                   <Link
                     key={req.id}
@@ -269,6 +270,7 @@ export default function User() {
         )}
 
       </div>
+    </div>
     </div>
   );
 }
