@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { Router } from "express";
 import {
   findUserById,
@@ -7,10 +8,16 @@ import {
   findOneTimePaymentRequestById,
   findFixedPaymentRequestById,
   findBankByDisplayName,
+  listPaymentProcessedByUserId,
+  listPaymentRequestContextsByIds,
+  createPaymentProcessedRecord,
+  findPaymentProcessedById,
+  updatePaymentProcessedById,
+  updatePaymentRequestStatusById,
 } from "../db.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { normalizeRollNo } from "../utils.js";
-import { initiateIciciSale } from "./bank-payment/icici.js";
+import { initiateIciciSale, checkIciciSaleStatus } from "./bank-payment/icici.js";
 
 const router = Router();
 
@@ -40,6 +47,64 @@ function attachEventDetails(requests, events) {
     eventDescription:
       detailsByEventId.get(request.eventId)?.description || "No event description available",
   }));
+}
+
+function resolveRecordStatus(record) {
+  const status = String(record?.status || "").trim().toLowerCase();
+  if (["success", "failed", "pending"].includes(status)) {
+    return status;
+  }
+
+  const txnStatus = String(record?.transaction?.status || record?.txnStatus || "").trim().toUpperCase();
+  if (["SUC", "SUCCESS"].includes(txnStatus)) {
+    return "success";
+  }
+  if (["REJ", "ERR", "FAILED", "FAIL"].includes(txnStatus)) {
+    return "failed";
+  }
+  return "pending";
+}
+
+function buildUserHistoryView(records, requestContexts, events) {
+  const contextByPaymentRequestId = new Map(
+    requestContexts.map((context) => [String(context.paymentRequestId || "").trim(), context])
+  );
+  const eventById = new Map(events.map((event) => [String(event.id || "").trim(), event]));
+
+  return records.map((record) => {
+    const paymentRequestId = String(record.paymentRequestId || "").trim();
+    const context = contextByPaymentRequestId.get(paymentRequestId);
+    const event = eventById.get(String(context?.eventId || "").trim());
+
+    return {
+      id: record.id,
+      paymentRequestId,
+      status: resolveRecordStatus(record),
+      student: record.student || null,
+      transaction: record.transaction || null,
+      bank: record.bank || null,
+      eventId: context?.eventId || null,
+      eventName: event?.name || "Unknown Event",
+      eventDescription: event?.description || "No event description available",
+      type: context?.type || null,
+      createdAt: record.createdAt || null,
+      updatedAt: record.updatedAt || null,
+    };
+  });
+}
+
+function appendTrackingParams(urlInput, params) {
+  try {
+    const url = new URL(urlInput);
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && String(value).trim()) {
+        url.searchParams.set(key, String(value).trim());
+      }
+    });
+    return url.toString();
+  } catch {
+    return urlInput;
+  }
 }
 
 async function resolvePayableRequestForUser(paymentRequestId, user) {
@@ -77,6 +142,22 @@ router.get("/optional", requireAuth, requireRole("user"), async (_req, res) => {
   const requests = await listAllFixedPaymentRequests();
   const events = await listEventsByIds(requests.map((request) => request.eventId));
   return res.json({ requests: attachEventDetails(requests, events) });
+});
+
+router.get("/history", requireAuth, requireRole("user"), async (req, res) => {
+  const user = await findUserById(req.auth.sub);
+  if (!user) {
+    return res.status(404).json({ message: "User not found" });
+  }
+
+  const records = await listPaymentProcessedByUserId(user.id);
+  const paymentRequestIds = records.map((record) => String(record.paymentRequestId || "").trim()).filter(Boolean);
+
+  const requestContexts = await listPaymentRequestContextsByIds(paymentRequestIds);
+  const eventIds = [...new Set(requestContexts.map((context) => String(context.eventId || "").trim()).filter(Boolean))];
+  const events = await listEventsByIds(eventIds);
+
+  return res.json({ transactions: buildUserHistoryView(records, requestContexts, events) });
 });
 
 router.post("/initiate-sale", requireAuth, requireRole("user"), async (req, res) => {
@@ -127,7 +208,6 @@ router.post("/initiate-sale", requireAuth, requireRole("user"), async (req, res)
     return res.status(400).json({ message: "Yet to be added" });
   }
 
-  // Validate and use custom amount for variable payments
   let finalAmount = paymentRequest.amount;
   const isVariableAmount = paymentRequest?.isAmountFixed === false;
 
@@ -144,17 +224,153 @@ router.post("/initiate-sale", requireAuth, requireRole("user"), async (req, res)
     finalAmount = parsedAmount;
   }
 
+  const paymentRecordId = crypto.randomUUID();
+  const returnURLWithTracking = returnURL;
+
   try {
     const paymentGatewayResponse = await initiateIciciSale({
       amount: finalAmount,
-      returnURL,
+      returnURL: returnURL,
       userEmail: user.email,
     });
-    return res.json(paymentGatewayResponse);
+
+    const now = new Date().toISOString();
+    const paymentRecord = {
+      id: paymentRecordId,
+      status: "pending",
+      student: {
+        userId: user.id,
+        roll_no: user.roll_no,
+        name: user.name,
+        email: user.email,
+      },
+      paymentRequestId,
+      transaction: {
+        transaction_id: paymentGatewayResponse?.requestPacket?.merchantTxnNo || null,
+        merchant_id: paymentGatewayResponse?.requestPacket?.merchantId || null,
+        response_code: "PENDING",
+        amount: Number(Number(finalAmount).toFixed(2)),
+        date: now,
+      },
+      bank: {
+        bank_id: selectedBankDoc?.id || selectedBankMatch,
+        bank_name: selectedBankDoc?.displayName || selectedBankMatch,
+      },
+      gateway: {
+        tranCtx: paymentGatewayResponse?.tranCtx || null,
+        requestPacket: paymentGatewayResponse?.requestPacket || null,
+        responsePacket: paymentGatewayResponse?.responsePacket || null,
+      },
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await createPaymentProcessedRecord(paymentRecord);
+
+    return res.json({
+      ...paymentGatewayResponse,
+      paymentRecordId,
+      returnURL: returnURL,
+      status: "pending",
+    });
   } catch (error) {
     if (error?.status) {
       return res.status(error.status).json({
         message: error.message || "Failed to initiate ICICI payment",
+        ...(error?.details || {}),
+      });
+    }
+    throw error;
+  }
+});
+
+router.post("/verify-status", requireAuth, requireRole("user"), async (req, res) => {
+  const paymentRecordId = String(req.body?.paymentRecordId || "").trim();
+  const fallbackPaymentRequestId = String(req.body?.paymentRequestId || "").trim();
+  const originalTxnNoInput = String(req.body?.originalTxnNo || req.body?.tranCtx || "").trim();
+
+  if (!paymentRecordId && !fallbackPaymentRequestId) {
+    return res.status(400).json({ message: "paymentRecordId or paymentRequestId is required" });
+  }
+
+  const user = await findUserById(req.auth.sub);
+  if (!user) {
+    return res.status(404).json({ message: "User not found" });
+  }
+
+  let paymentRecord = null;
+  if (paymentRecordId) {
+    paymentRecord = await findPaymentProcessedById(paymentRecordId);
+  }
+
+  if (!paymentRecord && fallbackPaymentRequestId) {
+    const records = await listPaymentProcessedByUserId(user.id);
+    paymentRecord = records.find((record) => String(record.paymentRequestId || "").trim() === fallbackPaymentRequestId) || null;
+  }
+
+  if (!paymentRecord) {
+    return res.status(404).json({ message: "Payment record not found" });
+  }
+
+  if (String(paymentRecord?.student?.userId || "") !== String(user.id)) {
+    return res.status(403).json({ message: "You are not allowed to verify this payment" });
+  }
+
+  if (String(paymentRecord.status || "").toLowerCase() === "success") {
+    return res.json({
+      status: "success",
+      paymentRecord,
+      message: "Payment is already marked as success",
+    });
+  }
+
+  const merchantTxnNo = String(paymentRecord?.transaction?.transaction_id || "").trim();
+  const originalTxnNo =
+    originalTxnNoInput ||
+    String(paymentRecord?.gateway?.originalTxnNo || "").trim() ||
+    String(paymentRecord?.gateway?.tranCtx || "").trim() ||
+    String(paymentRecord?.gateway?.responsePacket?.originalTxnNo || "").trim() ||
+    String(paymentRecord?.gateway?.responsePacket?.tranCtx || "").trim() ||
+    merchantTxnNo;
+
+  try {
+    const statusResult = await checkIciciSaleStatus({
+      merchantTxnNo,
+      originalTxnNo,
+    });
+
+    const finalStatus = statusResult.status;
+    const responseCode = statusResult.statusSignal || finalStatus.toUpperCase();
+
+    const updatedPaymentRecord = await updatePaymentProcessedById(paymentRecord.id, {
+      status: finalStatus,
+      transaction: {
+        ...(paymentRecord.transaction || {}),
+        response_code: responseCode,
+        date: new Date().toISOString(),
+      },
+      gateway: {
+        ...(paymentRecord.gateway || {}),
+        tranCtx: paymentRecord?.gateway?.tranCtx || null,
+        originalTxnNo,
+        statusRequestPacket: statusResult.requestPacket,
+        statusResponsePacket: statusResult.responsePacket,
+      },
+    });
+
+    if (finalStatus === "success" || finalStatus === "failed") {
+      await updatePaymentRequestStatusById(paymentRecord.paymentRequestId, finalStatus);
+    }
+
+    return res.json({
+      status: finalStatus,
+      paymentRecord: updatedPaymentRecord || paymentRecord,
+      statusSignal: statusResult.statusSignal,
+    });
+  } catch (error) {
+    if (error?.status) {
+      return res.status(error.status).json({
+        message: error.message || "Failed to verify payment status",
         ...(error?.details || {}),
       });
     }
