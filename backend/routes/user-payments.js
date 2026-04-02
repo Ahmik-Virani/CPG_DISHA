@@ -340,13 +340,14 @@ router.post("/verify-status", requireAuth, requireRole("user"), async (req, res)
     });
 
     const finalStatus = statusResult.status;
-    const responseCode = statusResult.statusSignal || finalStatus.toUpperCase();
+    const dbStatusLabel = statusResult.dbStatusLabel || (finalStatus === "success" ? "SUCCESSFUL" : "FAILURE");
 
     const updatedPaymentRecord = await updatePaymentProcessedById(paymentRecord.id, {
       status: finalStatus,
       transaction: {
         ...(paymentRecord.transaction || {}),
-        response_code: responseCode,
+        status: dbStatusLabel,
+        response_code: dbStatusLabel,
         date: new Date().toISOString(),
       },
       gateway: {
@@ -355,17 +356,17 @@ router.post("/verify-status", requireAuth, requireRole("user"), async (req, res)
         originalTxnNo,
         statusRequestPacket: statusResult.requestPacket,
         statusResponsePacket: statusResult.responsePacket,
+        txnRespDescription: statusResult.txnRespDescription || null,
       },
     });
 
-    if (finalStatus === "success" || finalStatus === "failed") {
-      await updatePaymentRequestStatusById(paymentRecord.paymentRequestId, finalStatus);
-    }
+    await updatePaymentRequestStatusById(paymentRecord.paymentRequestId, finalStatus);
 
     return res.json({
       status: finalStatus,
       paymentRecord: updatedPaymentRecord || paymentRecord,
       statusSignal: statusResult.statusSignal,
+      txnRespDescription: statusResult.txnRespDescription || null,
     });
   } catch (error) {
     if (error?.status) {

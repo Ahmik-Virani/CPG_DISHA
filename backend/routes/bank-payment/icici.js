@@ -136,15 +136,29 @@ function findTxnStatus(payload) {
   return "";
 }
 
-function normalizeFinalStatus(statusInput) {
-  const normalized = String(statusInput || "").trim().toUpperCase();
-  if (["SUC", "SUCCESS", "PAID", "OK", "00"].includes(normalized)) {
-    return "success";
+function findTxnRespDescription(payload) {
+  if (!payload || typeof payload !== "object") {
+    return "";
   }
-  if (["REJ", "ERR", "FAILED", "FAIL", "DECLINED"].includes(normalized)) {
-    return "failed";
+
+  const keys = ["txnRespDescription", "txnResponseDescription", "responseDescription"];
+  for (const key of keys) {
+    const value = payload[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
   }
-  return "pending";
+
+  for (const value of Object.values(payload)) {
+    if (value && typeof value === "object") {
+      const nested = findTxnRespDescription(value);
+      if (nested) {
+        return nested;
+      }
+    }
+  }
+
+  return "";
 }
 
 async function getIciciMerchantConfig() {
@@ -254,19 +268,20 @@ export async function checkIciciSaleStatus({
     throw buildHttpError(400, "Either tranCtx or merchantTxnNo is required to check ICICI status");
   }
 
-  const { merchantId } = await getIciciMerchantConfig();
+  const { merchantId, aggregatorID } = await getIciciMerchantConfig();
 
   const normalizedMerchantTxnNo = String(merchantTxnNo || "").trim();
   const resolvedOriginalTxnNo = String(originalTxnNo || "").trim() || normalizedMerchantTxnNo;
 
   const packetWithoutHash = {
     merchantId,
+    aggregatorID,
     transactionType: "STATUS",
   };
 
   if (normalizedMerchantTxnNo) {
     packetWithoutHash.merchantTxnNo = normalizedMerchantTxnNo;
-    packetWithoutHash.originalTxnNo = resolvedOriginalTxnNo;
+    packetWithoutHash.originalTxnNo = normalizedMerchantTxnNo;
   }
 
   if (tranCtx) {
@@ -288,24 +303,15 @@ export async function checkIciciSaleStatus({
     secureHash,
   };
 
-  // Send status check as x-www-form-urlencoded in sorted-key order.
-  const sortedEntries = Object.entries(requestPacket).sort(([keyA], [keyB]) =>
-    keyA.localeCompare(keyB)
-  );
-  const formBody = new URLSearchParams();
-  for (const [key, value] of sortedEntries) {
-    formBody.append(key, String(value ?? ""));
-  }
-
-  console.log("[ICICI statusCheck] requestPacket:\\n" + JSON.stringify(requestPacket, null, 2));
+  console.log("[ICICI statusCheck] requestPacket:\n" + JSON.stringify(requestPacket, null, 2));
 
   const statusCheckResponse = await fetch(ICICI_STATUS_CHECK_URL, {
     method: "POST",
     headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
+      "Content-Type": "application/json",
       Accept: "application/json",
     },
-    body: formBody.toString(),
+    body: JSON.stringify(requestPacket),
   });
 
   const rawResponse = await statusCheckResponse.text();
@@ -316,7 +322,7 @@ export async function checkIciciSaleStatus({
     responsePacket = Object.fromEntries(new URLSearchParams(rawResponse));
   }
 
-  console.log("[ICICI statusCheck] responsePacket:\\n" + JSON.stringify(responsePacket, null, 2));
+  console.log("[ICICI statusCheck] responsePacket:\n" + JSON.stringify(responsePacket, null, 2));
 
   if (!statusCheckResponse.ok) {
     throw buildHttpError(502, "Failed to check status with ICICI", {
@@ -326,11 +332,14 @@ export async function checkIciciSaleStatus({
   }
 
   const statusSignal = findTxnStatus(responsePacket);
-  const status = normalizeFinalStatus(statusSignal);
+  const txnRespDescription = findTxnRespDescription(responsePacket);
+  const isSuccessful = txnRespDescription.toLowerCase() === "transaction successful";
 
   return {
-    status,
+    status: isSuccessful ? "success" : "failed",
+    dbStatusLabel: isSuccessful ? "SUCCESSFUL" : "FAILURE",
     statusSignal,
+    txnRespDescription,
     requestPacket,
     responsePacket,
   };
