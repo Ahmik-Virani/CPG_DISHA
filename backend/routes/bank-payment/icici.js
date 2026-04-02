@@ -63,9 +63,25 @@ function generateMerchantTxnNo() {
 function buildSecureHashFromSortedValues(packet) {
   const sortedKeys = Object.keys(packet).sort();
   const concatenatedValues = sortedKeys.map((key) => String(packet[key] ?? "")).join("");
+  return buildSecureHashFromConcatenatedValues(concatenatedValues);
+}
+
+function buildSecureHashFromOrderedValues(values) {
+  const concatenatedValues = values.map((value) => String(value ?? "")).join("");
+  return buildSecureHashFromConcatenatedValues(concatenatedValues);
+}
+
+function buildSecureHashFromConcatenatedValues(concatenatedValues) {
+  const hashAlgorithm = (ICICI_HMAC_ALGO || "sha256").toLowerCase();
+
+  if (!crypto.getHashes().includes(hashAlgorithm)) {
+    throw buildHttpError(500, "ICICI_HMAC_ALGO is invalid", {
+      hashAlgorithm,
+    });
+  }
 
   return crypto
-    .createHmac(ICICI_HMAC_ALGO || "sha256", ICICI_HMAC_SECRET)
+    .createHmac(hashAlgorithm, ICICI_HMAC_SECRET)
     .update(concatenatedValues)
     .digest("hex");
 }
@@ -95,6 +111,71 @@ function findTranCtx(payload) {
   return "";
 }
 
+function findTxnStatus(payload) {
+  if (!payload || typeof payload !== "object") {
+    return "";
+  }
+
+  const keys = ["status", "txnStatus", "transactionStatus", "responseCode", "response_code"];
+  for (const key of keys) {
+    const value = payload[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  for (const value of Object.values(payload)) {
+    if (value && typeof value === "object") {
+      const nested = findTxnStatus(value);
+      if (nested) {
+        return nested;
+      }
+    }
+  }
+
+  return "";
+}
+
+function findTxnRespDescription(payload) {
+  if (!payload || typeof payload !== "object") {
+    return "";
+  }
+
+  const keys = ["txnRespDescription", "txnResponseDescription", "responseDescription"];
+  for (const key of keys) {
+    const value = payload[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  for (const value of Object.values(payload)) {
+    if (value && typeof value === "object") {
+      const nested = findTxnRespDescription(value);
+      if (nested) {
+        return nested;
+      }
+    }
+  }
+
+  return "";
+}
+
+async function getIciciMerchantConfig() {
+  const iciciBankDoc = await findBankByDisplayName("ICICI");
+  const merchantId = getBankFieldValue(iciciBankDoc, ["merchantID", "merchantId", "ICICI_merchantId"]);
+  const aggregatorID = getBankFieldValue(iciciBankDoc, ["aggregatorID", "aggregatorId"]);
+
+  if (!merchantId || !aggregatorID) {
+    throw buildHttpError(400, "ICICI bank configuration is missing merchantID or aggregatorID");
+  }
+
+  return {
+    merchantId: String(merchantId),
+    aggregatorID: String(aggregatorID),
+  };
+}
+
 export async function initiateIciciSale({ amount, returnURL, userEmail }) {
   if (!ICICI_HMAC_SECRET) {
     throw buildHttpError(500, "ICICI_HMAC_SECRET is not configured");
@@ -108,20 +189,14 @@ export async function initiateIciciSale({ amount, returnURL, userEmail }) {
     );
   }
 
-  const iciciBankDoc = await findBankByDisplayName("ICICI");
-  const merchantId = getBankFieldValue(iciciBankDoc, ["merchantID", "merchantId", "ICICI_merchantId"]);
-  const aggregatorID = getBankFieldValue(iciciBankDoc, ["aggregatorID", "aggregatorId"]);
-
-  if (!merchantId || !aggregatorID) {
-    throw buildHttpError(400, "ICICI bank configuration is missing merchantID or aggregatorID");
-  }
+  const { merchantId, aggregatorID } = await getIciciMerchantConfig();
 
   const packetWithoutHash = {
     amount: Number(amountNumber.toFixed(2)),
     currencyCode: 356,
     customerEmailID: userEmail,
-    merchantId: String(merchantId),
-    aggregatorID: String(aggregatorID),
+    merchantId,
+    aggregatorID,
     merchantTxnNo: generateMerchantTxnNo(),
     payType: 0,
     returnURL,
@@ -171,5 +246,101 @@ export async function initiateIciciSale({ amount, returnURL, userEmail }) {
     requestPacket,
     responsePacket,
     statusCheckURL: ICICI_STATUS_CHECK_URL,
+  };
+}
+
+export async function checkIciciSaleStatus({
+  tranCtx,
+  merchantTxnNo,
+  originalTxnNo,
+  amount,
+  userEmail,
+}) {
+  if (!ICICI_HMAC_SECRET) {
+    throw buildHttpError(500, "ICICI_HMAC_SECRET is not configured");
+  }
+
+  if (!ICICI_STATUS_CHECK_URL) {
+    throw buildHttpError(500, "ICICI_STATUS_CHECK_URL is not configured");
+  }
+
+  if (!tranCtx && !merchantTxnNo) {
+    throw buildHttpError(400, "Either tranCtx or merchantTxnNo is required to check ICICI status");
+  }
+
+  const { merchantId, aggregatorID } = await getIciciMerchantConfig();
+
+  const normalizedMerchantTxnNo = String(merchantTxnNo || "").trim();
+  const resolvedOriginalTxnNo = String(originalTxnNo || "").trim() || normalizedMerchantTxnNo;
+
+  const packetWithoutHash = {
+    merchantId,
+    aggregatorID,
+    transactionType: "STATUS",
+  };
+
+  if (normalizedMerchantTxnNo) {
+    packetWithoutHash.merchantTxnNo = normalizedMerchantTxnNo;
+    packetWithoutHash.originalTxnNo = normalizedMerchantTxnNo;
+  }
+
+  if (tranCtx) {
+    packetWithoutHash.tranCtx = String(tranCtx).trim();
+  }
+
+  if (Number.isFinite(Number(amount))) {
+    packetWithoutHash.amount = Number(Number(amount).toFixed(2));
+  }
+
+  if (userEmail) {
+    packetWithoutHash.customerEmailID = String(userEmail).trim();
+  }
+
+  // ICICI STATUS secureHash: sort keys alphabetically, concatenate values, then HMAC.
+  const secureHash = buildSecureHashFromSortedValues(packetWithoutHash);
+  const requestPacket = {
+    ...packetWithoutHash,
+    secureHash,
+  };
+
+  console.log("[ICICI statusCheck] requestPacket:\n" + JSON.stringify(requestPacket, null, 2));
+
+  const statusCheckResponse = await fetch(ICICI_STATUS_CHECK_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(requestPacket),
+  });
+
+  const rawResponse = await statusCheckResponse.text();
+  let responsePacket = {};
+  try {
+    responsePacket = rawResponse ? JSON.parse(rawResponse) : {};
+  } catch {
+    responsePacket = Object.fromEntries(new URLSearchParams(rawResponse));
+  }
+
+  console.log("[ICICI statusCheck] responsePacket:\n" + JSON.stringify(responsePacket, null, 2));
+
+  if (!statusCheckResponse.ok) {
+    throw buildHttpError(502, "Failed to check status with ICICI", {
+      upstreamStatus: statusCheckResponse.status,
+      responsePacket,
+    });
+  }
+
+  const statusSignal = findTxnStatus(responsePacket);
+  const txnRespDescription = findTxnRespDescription(responsePacket);
+  const isSuccessful = txnRespDescription.toLowerCase() === "transaction successful";
+
+  return {
+    status: isSuccessful ? "success" : "failed",
+    dbStatusLabel: isSuccessful ? "SUCCESSFUL" : "FAILURE",
+    statusSignal,
+    txnRespDescription,
+    requestPacket,
+    responsePacket,
   };
 }

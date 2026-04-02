@@ -3,17 +3,67 @@ import { Router } from "express";
 import {
   findUserById,
   createEventRecord,
+  listEventsByIds,
   listEventsBySystemHeadId,
   findEventByIdForSystemHead,
   markEventDone,
   deleteEventById,
   listBanks,
   getLatestPaymentRequestTypeByEventIds,
+  listPaymentRequestIdsBySystemHead,
+  listPaymentProcessedByPaymentRequestIds,
+  listPaymentRequestContextsByIds,
 } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireRole } from "../middleware/auth.js";
 
 const router = Router();
+
+
+function resolveRecordStatus(record) {
+  const status = String(record?.status || "").trim().toLowerCase();
+  if (status) {
+    return status;
+  }
+
+  const txnStatus = String(record?.transaction?.status || record?.txnStatus || "").trim().toUpperCase();
+  if (txnStatus === "SUC") {
+    return "paid";
+  }
+  if (["REJ", "ERR"].includes(txnStatus)) {
+    return "failed";
+  }
+  return "pending";
+}
+
+function buildSystemHeadHistory(records, requestContexts, events) {
+  const contextByPaymentRequestId = new Map(
+    requestContexts.map((context) => [String(context.paymentRequestId || "").trim(), context])
+  );
+  const eventById = new Map(events.map((event) => [String(event.id || "").trim(), event]));
+
+  return records.map((record) => {
+    const paymentRequestId = String(record.paymentRequestId || "").trim();
+    const context = contextByPaymentRequestId.get(paymentRequestId);
+    const event = eventById.get(String(context?.eventId || "").trim());
+
+    return {
+      id: record.id,
+      paymentRequestId,
+      eventId: context?.eventId || null,
+      eventName: event?.name || "Unknown Event",
+      eventDescription: event?.description || "No event description available",
+      type: context?.type || null,
+      status: resolveRecordStatus(record),
+      student: record.student || null,
+      transaction: record.transaction || null,
+      bank: record.bank || null,
+      createdAt: record.createdAt || null,
+      updatedAt: record.updatedAt || null,
+    };
+  });
+}
+
 
 router.get("/banks/options", requireAuth, requireRole("system_head"), async (_req, res) => {
   const banks = await listBanks();
@@ -41,6 +91,25 @@ router.get("/", requireAuth, requireRole("system_head"), async (req, res) => {
   return res.json({ events: eventsWithPaymentType });
 });
 
+router.get("/transactions/history", requireAuth, requireRole("system_head"), async (req, res) => {
+  const eventId = String(req.query?.eventId || "").trim();
+  const paymentRequestIds = await listPaymentRequestIdsBySystemHead(req.auth.sub, eventId);
+
+  if (!paymentRequestIds.length) {
+    return res.json({ transactions: [] });
+  }
+
+  const [records, requestContexts] = await Promise.all([
+    listPaymentProcessedByPaymentRequestIds(paymentRequestIds),
+    listPaymentRequestContextsByIds(paymentRequestIds),
+  ]);
+
+  const eventIds = [...new Set(requestContexts.map((context) => String(context.eventId || "").trim()).filter(Boolean))];
+  const events = await listEventsByIds(eventIds);
+
+  return res.json({ transactions: buildSystemHeadHistory(records, requestContexts, events) });
+});
+
 router.get("/:eventId", requireAuth, requireRole("system_head"), async (req, res) => {
   const event = await findEventByIdForSystemHead(req.params.eventId, req.auth.sub);
 
@@ -50,6 +119,7 @@ router.get("/:eventId", requireAuth, requireRole("system_head"), async (req, res
 
   return res.json({ event });
 });
+
 
 router.post("/", requireAuth, requireRole("system_head"), async (req, res) => {
   const name = String(req.body?.name || "").trim();

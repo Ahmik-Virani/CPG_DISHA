@@ -9,6 +9,7 @@ let eventsCollection;
 let fixedPaymentRequestsCollection;
 let oneTimePaymentRequestsCollection;
 let banksCollection;
+let paymentProcessedCollection;
 let mongoReady = false;
 
 function resolveMongoUri() {
@@ -63,6 +64,15 @@ export function getBanksCollection() {
   return banksCollection;
 }
 
+export function getPaymentProcessedCollection() {
+  if (!paymentProcessedCollection) {
+    const error = new Error("MongoDB is not connected yet");
+    error.status = 503;
+    throw error;
+  }
+  return paymentProcessedCollection;
+}
+
 export function isMongoReady() {
   return mongoReady;
 }
@@ -102,6 +112,133 @@ export async function createOneTimePaymentRequestRecords(paymentRequests) {
 
   await getOneTimePaymentRequestsCollection().insertMany(paymentRequests);
   return paymentRequests;
+}
+
+
+export async function createPaymentProcessedRecord(paymentRecord) {
+  await getPaymentProcessedCollection().insertOne(paymentRecord);
+  return paymentRecord;
+}
+
+export async function findPaymentProcessedById(paymentRecordId) {
+  return getPaymentProcessedCollection().findOne({ id: paymentRecordId });
+}
+
+export async function updatePaymentProcessedById(paymentRecordId, updateFields) {
+  const update = {
+    ...updateFields,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const result = await getPaymentProcessedCollection().findOneAndUpdate(
+    { id: paymentRecordId },
+    { $set: update },
+    {
+      returnDocument: "after",
+      projection: { _id: 0 },
+    }
+  );
+
+  if (!result) {
+    return null;
+  }
+
+  return result.value || result;
+}
+
+export async function listPaymentProcessedByUserId(userId) {
+  return getPaymentProcessedCollection()
+    .find({ "student.userId": userId })
+    .sort({ createdAt: -1 })
+    .toArray();
+}
+
+export async function listPaymentProcessedByPaymentRequestIds(paymentRequestIds) {
+  const ids = Array.isArray(paymentRequestIds)
+    ? [...new Set(paymentRequestIds.map((id) => String(id || "").trim()).filter(Boolean))]
+    : [];
+
+  if (!ids.length) {
+    return [];
+  }
+
+  return getPaymentProcessedCollection()
+    .find({ paymentRequestId: { $in: ids } })
+    .sort({ createdAt: -1 })
+    .toArray();
+}
+
+export async function listPaymentRequestContextsByIds(paymentRequestIds) {
+  const ids = Array.isArray(paymentRequestIds)
+    ? [...new Set(paymentRequestIds.map((id) => String(id || "").trim()).filter(Boolean))]
+    : [];
+
+  if (!ids.length) {
+    return [];
+  }
+
+  const [fixedRequests, oneTimeRequests] = await Promise.all([
+    getFixedPaymentRequestsCollection().find({ id: { $in: ids } }).toArray(),
+    getOneTimePaymentRequestsCollection().find({ id: { $in: ids } }).toArray(),
+  ]);
+
+  return [
+    ...fixedRequests.map((request) => ({
+      paymentRequestId: request.id,
+      eventId: request.eventId,
+      createdBySystemHeadId: request.createdBySystemHeadId,
+      type: request.type,
+    })),
+    ...oneTimeRequests.map((request) => ({
+      paymentRequestId: request.id,
+      eventId: request.eventId,
+      createdBySystemHeadId: request.createdBySystemHeadId,
+      type: request.type,
+    })),
+  ];
+}
+
+export async function updatePaymentRequestStatusById(paymentRequestId, status) {
+  const update = {
+    status,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const [oneTimeResult, fixedResult] = await Promise.all([
+    getOneTimePaymentRequestsCollection().findOneAndUpdate(
+      { id: paymentRequestId },
+      { $set: update },
+      { returnDocument: "after", projection: { _id: 0 } }
+    ),
+    getFixedPaymentRequestsCollection().findOneAndUpdate(
+      { id: paymentRequestId },
+      { $set: update },
+      { returnDocument: "after", projection: { _id: 0 } }
+    ),
+  ]);
+
+  const oneTime = oneTimeResult?.value || oneTimeResult || null;
+  const fixed = fixedResult?.value || fixedResult || null;
+  return oneTime || fixed || null;
+}
+
+export async function listPaymentRequestIdsBySystemHead(systemHeadId, eventId) {
+  const query = { createdBySystemHeadId: systemHeadId };
+  const normalizedEventId = String(eventId || "").trim();
+  if (normalizedEventId) {
+    query.eventId = normalizedEventId;
+  }
+
+  const [fixedIds, oneTimeIds] = await Promise.all([
+    getFixedPaymentRequestsCollection()
+      .find(query, { projection: { _id: 0, id: 1 } })
+      .toArray(),
+    getOneTimePaymentRequestsCollection()
+      .find(query, { projection: { _id: 0, id: 1 } })
+      .toArray(),
+  ]);
+
+  return [...new Set([...fixedIds, ...oneTimeIds].map((row) => String(row.id || "").trim()).filter(Boolean))];
 }
 
 export async function listOneTimePaymentRequestsByBatchId(batchId, systemHeadId) {
@@ -331,6 +468,7 @@ async function connectMongo() {
   fixedPaymentRequestsCollection = db.collection("Fixed_Payment_Request");
   oneTimePaymentRequestsCollection = db.collection("One_Time_Payment_Request");
   banksCollection = db.collection("Banks");
+  paymentProcessedCollection = db.collection("Payment_Processed");
   mongoReady = true;
 
   await usersCollection.createIndex({ id: 1 }, { unique: true });
@@ -346,6 +484,10 @@ async function connectMongo() {
   await oneTimePaymentRequestsCollection.createIndex({ eventId: 1, createdBySystemHeadId: 1 });
   await banksCollection.createIndex({ id: 1 }, { unique: true });
   await banksCollection.createIndex({ normalizedDisplayName: 1 }, { unique: true });
+  await paymentProcessedCollection.createIndex({ id: 1 }, { unique: true });
+  await paymentProcessedCollection.createIndex({ paymentRequestId: 1 });
+  await paymentProcessedCollection.createIndex({ "student.userId": 1 });
+  await paymentProcessedCollection.createIndex({ createdAt: -1 });
 }
 
 export async function bootstrapAdmin() {
@@ -384,6 +526,7 @@ export async function connectMongoWithRetry(attempt = 1) {
     fixedPaymentRequestsCollection = undefined;
     oneTimePaymentRequestsCollection = undefined;
     banksCollection = undefined;
+    paymentProcessedCollection = undefined;
     const delayMs = Math.min(30000, attempt * 3000);
     console.error(
       "MongoDB connect failed (attempt " + attempt + "). Retrying in " + Math.round(delayMs / 1000) + "s",

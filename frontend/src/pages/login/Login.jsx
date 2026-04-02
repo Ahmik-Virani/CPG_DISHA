@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Shield, User, Settings } from "lucide-react";
+// Shield kept for admin role icon
 import { useAuth } from "../../context/AuthContext";
 import { getRoleHomePath } from "../../auth/roleHome";
 
@@ -33,15 +34,20 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-sky-100 flex items-center justify-center px-4">
-      <div className="bg-white w-full max-w-md p-8 rounded-2xl shadow">
+    <div
+      className="min-h-screen flex items-center justify-center px-4"
+      style={{
+        backgroundImage: "url('/login-bg.avif')",
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+      }}
+    >
+      <div className="bg-white/90 backdrop-blur-sm w-full max-w-md p-8 rounded-2xl shadow-lg">
         <div className="flex justify-center mb-4">
-          <div className="bg-indigo-500 text-white p-3 rounded-full">
-            <Shield size={24} />
-          </div>
+          <img src="/iith-logo.png" alt="IIT Hyderabad" className="h-16 object-contain" />
         </div>
 
-        <h1 className="text-2xl font-semibold text-center">IIT Payment Gateway</h1>
+        <h1 className="text-2xl font-semibold text-center">IIT Hyderabad Payment Gateway</h1>
         <p className="text-center text-gray-500 mb-6">Sign in to your account</p>
 
         <form onSubmit={onSubmit} className="space-y-3">
@@ -103,11 +109,9 @@ export default function Login() {
           </button>
         </form>
 
-        {selectedRole === "user" && (
-          <p className="text-sm text-center mt-4 text-gray-600">
-            New user? <Link to="/signup" className="text-blue-600">Create account</Link>
-          </p>
-        )}
+        <p className="text-sm text-center mt-4 text-gray-600" style={{ visibility: selectedRole === "user" ? "visible" : "hidden" }}>
+          New user? <Link to="/signup" className="text-blue-600">Create account</Link>
+        </p>
       </div>
     </div>
   );
