@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import Login from "./pages/login/Login";
 import Signup from "./pages/login/Signup";
 import Admin from "./pages/admin/Admin";
+import SystemHeadPaymentHistory from "./pages/admin/components/SystemHeadPaymentHistory";
 import User from "./pages/user/User";
 import PaymentDetails from "./pages/user/PaymentDetails";
 import SystemHead from "./pages/system_head/System_Head";
@@ -37,6 +38,15 @@ function App() {
         element={
           <ProtectedRoute allowedRoles={["admin"]}>
             <Admin />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/system-head/:systemHeadId/payment-history"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <SystemHeadPaymentHistory />
           </ProtectedRoute>
         }
       />

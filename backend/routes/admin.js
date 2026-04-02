@@ -10,6 +10,10 @@ import {
   listBanks,
   updateBankRecordById,
   getUsersCollection,
+  listPaymentRequestIdsBySystemHead,
+  listPaymentProcessedByPaymentRequestIds,
+  listPaymentRequestContextsByIds,
+  listEventsByIds,
 } from "../db.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { normalizeEmail } from "../utils.js";
@@ -255,6 +259,81 @@ router.delete("/banks/:bankId", requireAuth, requireRole("admin"), async (req, r
   }
 
   return res.json({ message: "Bank deleted successfully" });
+});
+
+function resolveRecordStatus(record) {
+  const status = String(record?.status || "").trim().toLowerCase();
+  if (status) {
+    return status;
+  }
+
+  const txnStatus = String(record?.transaction?.status || record?.txnStatus || "").trim().toUpperCase();
+  if (txnStatus === "SUC") {
+    return "paid";
+  }
+  if (["REJ", "ERR"].includes(txnStatus)) {
+    return "failed";
+  }
+  return "pending";
+}
+
+function buildSystemHeadHistory(records, requestContexts, events) {
+  const contextByPaymentRequestId = new Map(
+    requestContexts.map((context) => [String(context.paymentRequestId || "").trim(), context])
+  );
+  const eventById = new Map(events.map((event) => [String(event.id || "").trim(), event]));
+
+  return records.map((record) => {
+    const paymentRequestId = String(record.paymentRequestId || "").trim();
+    const context = contextByPaymentRequestId.get(paymentRequestId);
+    const event = eventById.get(String(context?.eventId || "").trim());
+
+    return {
+      id: record.id,
+      paymentRequestId,
+      eventId: context?.eventId || null,
+      eventName: event?.name || "Unknown Event",
+      eventDescription: event?.description || "No event description available",
+      type: context?.type || null,
+      status: resolveRecordStatus(record),
+      student: record.student || null,
+      transaction: record.transaction || null,
+      bank: record.bank || null,
+      createdAt: record.createdAt || null,
+      updatedAt: record.updatedAt || null,
+    };
+  });
+}
+
+router.get("/system-heads/:systemHeadId/payment-history", requireAuth, requireRole("admin"), async (req, res) => {
+  const systemHeadId = String(req.params?.systemHeadId || "").trim();
+  const eventId = String(req.query?.eventId || "").trim();
+
+  if (!systemHeadId) {
+    return res.status(400).json({ message: "System head ID is required" });
+  }
+
+  // Verify the system head exists
+  const systemHead = await getUsersCollection().findOne({ id: systemHeadId, role: "system_head" });
+  if (!systemHead) {
+    return res.status(404).json({ message: "System head not found" });
+  }
+
+  const paymentRequestIds = await listPaymentRequestIdsBySystemHead(systemHeadId, eventId);
+
+  if (!paymentRequestIds.length) {
+    return res.json({ transactions: [] });
+  }
+
+  const [records, requestContexts] = await Promise.all([
+    listPaymentProcessedByPaymentRequestIds(paymentRequestIds),
+    listPaymentRequestContextsByIds(paymentRequestIds),
+  ]);
+
+  const eventIds = [...new Set(requestContexts.map((context) => String(context.eventId || "").trim()).filter(Boolean))];
+  const events = await listEventsByIds(eventIds);
+
+  return res.json({ transactions: buildSystemHeadHistory(records, requestContexts, events) });
 });
 
 export default router;
