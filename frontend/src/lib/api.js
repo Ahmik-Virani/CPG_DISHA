@@ -74,6 +74,8 @@ export const eventApi = {
   remove: (token, eventId) => apiRequest("/events/" + eventId, { method: "DELETE" }, token),
   createPaymentRequest: (token, eventId, data) =>
     apiRequest("/events/" + eventId + "/payment-requests", { method: "POST", body: JSON.stringify(data) }, token),
+  getTransactionHistory: (token, eventId) =>
+    apiRequest("/events/transactions/history" + (eventId ? "?eventId=" + eventId : ""), { method: "GET" }, token),
 };
 
 export const userPaymentApi = {

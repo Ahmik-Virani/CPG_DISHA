@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CalendarPlus, ArrowUpRight, History, PlusCircle } from "lucide-react";
+import { CalendarPlus, ArrowUpRight, History, PlusCircle, CreditCard } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import Header from "../../components/Header";
@@ -85,9 +85,15 @@ export default function ManageEvent() {
         <div className="inline-flex bg-white border border-gray-200 shadow-sm p-1 rounded-full gap-1">
           <button
             onClick={() => navigate("/system_head/manage-event")}
-            className="flex items-center gap-2 px-5 py-2 rounded-full text-sm font-medium bg-orange-300 text-white shadow transition-all duration-200"
+            className="flex items-center gap-2 px-5 py-2 rounded-full text-sm font-medium bg-orange-400 text-white shadow transition-all duration-200"
           >
             <PlusCircle size={15} /> Manage Events
+          </button>
+          <button
+            onClick={() => navigate("/system_head?tab=payment-history")}
+            className="flex items-center gap-2 px-5 py-2 rounded-full text-sm font-medium text-gray-500 hover:text-gray-900 transition-all duration-200"
+          >
+            <CreditCard size={15} /> Payment History
           </button>
           <button
             onClick={() => navigate("/system_head")}
