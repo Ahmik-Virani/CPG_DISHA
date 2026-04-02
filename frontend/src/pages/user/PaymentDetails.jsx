@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, FileText, ReceiptIndianRupee } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
@@ -27,16 +27,21 @@ function formatDeadline(request) {
 }
 
 function normalizeStatus(status) {
-  return String(status || "").trim().toLowerCase() === "paid" ? "paid" : "pending";
+  const normalized = String(status || "").trim().toLowerCase();
+  if (normalized === "success" || normalized === "paid") return "success";
+  if (normalized === "failed") return "failed";
+  return "pending";
 }
 
 export default function PaymentDetails() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { token, logout } = useAuth();
+  const { token } = useAuth();
   const request = location.state?.request || null;
   const [isPaying, setIsPaying] = useState(false);
   const [payError, setPayError] = useState("");
+  const [payStatusMessage, setPayStatusMessage] = useState("");
+  const [isVerifyingStatus, setIsVerifyingStatus] = useState(false);
   const [customAmount, setCustomAmount] = useState("");
 
   const enabledBanks =
@@ -69,8 +74,45 @@ export default function PaymentDetails() {
   }
 
   const status = normalizeStatus(request.status);
-  const canInitiatePayment = status !== "paid";
+  const canInitiatePayment = status !== "success";
   const deadline = formatDeadline(request);
+
+  useEffect(() => {
+    if (!token || !request?.id) return;
+
+    const params = new URLSearchParams(location.search);
+    const paymentRecordId = params.get("paymentRecordId") || "";
+    const tranCtx = params.get("tranCtx") || params.get("tranctx") || "";
+    if (!paymentRecordId && !tranCtx) return;
+
+    setIsVerifyingStatus(true);
+    setPayError("");
+    setPayStatusMessage("");
+
+    userPaymentApi
+      .verifyStatus(token, {
+        paymentRecordId,
+        paymentRequestId: request.id,
+        tranCtx,
+      })
+      .then((data) => {
+        const finalStatus = String(data?.status || "pending").toLowerCase();
+        if (finalStatus === "success") {
+          setPayStatusMessage("Payment successful. Status synced.");
+        } else if (finalStatus === "failed") {
+          setPayError("Payment failed. Please try again.");
+        } else {
+          setPayStatusMessage("Payment is still pending confirmation.");
+        }
+      })
+      .catch((error) => {
+        setPayError(error.message || "Failed to verify payment status");
+      })
+      .finally(() => {
+        setIsVerifyingStatus(false);
+        navigate(location.pathname, { replace: true, state: location.state });
+      });
+  }, [location.pathname, location.search, location.state, navigate, request?.id, token]);
 
   const handlePayNow = async () => {
     if (!request?.id || !token || !canInitiatePayment || !selectedBank) return;
@@ -90,13 +132,17 @@ export default function PaymentDetails() {
       const payload = {
         paymentRequestId: request.id,
         bank: selectedBank,
-        returnURL: window.location.href,
+        returnURL: window.location.origin + "/user",
       };
       if (isVariableAmount && customAmount.trim()) {
         payload.customAmount = parseFloat(customAmount);
       }
       const data = await userPaymentApi.initiateSale(token, payload);
       if (!data?.paymentURL) throw new Error("Payment URL is missing from gateway response");
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("cpg:lastPaymentRecordId", String(data?.paymentRecordId || ""));
+        window.localStorage.setItem("cpg:lastPaymentRequestId", String(request.id || ""));
+      }
       window.location.assign(data.paymentURL);
     } catch (error) {
       setPayError(error.message || "Failed to initiate payment");
@@ -150,8 +196,10 @@ export default function PaymentDetails() {
             <div className="flex items-center gap-2.5 mt-4 flex-wrap">
               <span
                 className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold capitalize border ${
-                  status === "paid"
+                  status === "success"
                     ? "bg-green-500/20 text-green-200 border-green-400/30"
+                    : status === "failed"
+                    ? "bg-red-500/20 text-red-200 border-red-400/30"
                     : "bg-white/10 text-white/90 border-white/15"
                 }`}
               >
@@ -225,6 +273,12 @@ export default function PaymentDetails() {
               )}
             </div>
 
+            {isVerifyingStatus && (
+              <p className="text-sm text-gray-500 -mt-2">Verifying payment status...</p>
+            )}
+            {payStatusMessage && (
+              <p className="text-sm text-green-600 -mt-2">{payStatusMessage}</p>
+            )}
             {payError && (
               <p className="text-sm text-red-500 -mt-2">{payError}</p>
             )}
@@ -245,7 +299,7 @@ export default function PaymentDetails() {
               {isPaying ? "Redirecting to bank..." : "Pay Now"}
             </button>
 
-            {status === "paid" && (
+            {status === "success" && (
               <button
                 type="button"
                 className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 px-6 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"

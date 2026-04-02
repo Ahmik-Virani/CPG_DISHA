@@ -74,11 +74,20 @@ export const eventApi = {
   remove: (token, eventId) => apiRequest("/events/" + eventId, { method: "DELETE" }, token),
   createPaymentRequest: (token, eventId, data) =>
     apiRequest("/events/" + eventId + "/payment-requests", { method: "POST", body: JSON.stringify(data) }, token),
+  getTransactionHistory: (token, eventId) =>
+    apiRequest(
+      "/events/transactions/history" + (eventId ? "?eventId=" + encodeURIComponent(eventId) : ""),
+      { method: "GET" },
+      token
+    ),
 };
 
 export const userPaymentApi = {
   getPending: (token) => apiRequest("/user-payments/pending", { method: "GET" }, token),
   getOptional: (token) => apiRequest("/user-payments/optional", { method: "GET" }, token),
+  getHistory: (token) => apiRequest("/user-payments/history", { method: "GET" }, token),
   initiateSale: (token, data) =>
     apiRequest("/user-payments/initiate-sale", { method: "POST", body: JSON.stringify(data) }, token),
+  verifyStatus: (token, data) =>
+    apiRequest("/user-payments/verify-status", { method: "POST", body: JSON.stringify(data) }, token),
 };
