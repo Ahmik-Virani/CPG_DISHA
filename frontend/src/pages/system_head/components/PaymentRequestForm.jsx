@@ -16,15 +16,26 @@ export default function PaymentRequestForm({
   onSelectBank,
   onFixedAmountToggle,
   onFixedAmountChange,
+  onRecurringModeChange,
+  onNextExecutionDateChange,
+  onIntervalValueChange,
+  onIntervalUnitChange,
   onCancel,
 }) {
+  const getFormTitle = () => {
+    if (paymentType === "one_time") return "One-Time";
+    if (paymentType === "fixed") return "Fixed";
+    if (paymentType === "recurring") return "Recurring";
+    return "Payment";
+  };
+
   return (
     <form onSubmit={onSubmit} className="mt-4 border-t border-gray-100 pt-5 space-y-6">
 
       {/* ── Form header ── */}
       <div className="flex items-center justify-between">
         <p className="text-sm font-semibold text-gray-700">
-          {paymentType === "one_time" ? "One-Time" : "Fixed"} Payment Request
+          {getFormTitle()} Payment Request
         </p>
         <button
           type="button"
@@ -72,6 +83,104 @@ export default function PaymentRequestForm({
                 placeholder="0.00"
                 required
               />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Recurring: amount + mode selection ── */}
+      {paymentType === "recurring" && (
+        <div className="space-y-5">
+          {/* Amount field (required for recurring) */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Fixed Amount (₹) *</label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={paymentForm.amount}
+              onChange={onFixedAmountChange}
+              className="w-full max-w-xs border-2 border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-orange-600 transition-colors"
+              placeholder="0.00"
+              required
+            />
+            <p className="text-xs text-gray-500 mt-1">Amount charged each recurring cycle</p>
+          </div>
+
+          {/* Mode Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-3">Recurrence Mode *</label>
+            <div className="space-y-3">
+              <label className="inline-flex items-center gap-3 px-4 py-3 border-2 border-gray-200 rounded-xl cursor-pointer hover:bg-orange-50 transition-colors" 
+                style={{ borderColor: paymentForm.recurringMode === "date" ? "#f97316" : "" }}>
+                <input
+                  type="radio"
+                  name="recurringMode"
+                  value="date"
+                  checked={paymentForm.recurringMode === "date"}
+                  onChange={(e) => onRecurringModeChange(e.target.value)}
+                  className="w-4 h-4 accent-orange-600"
+                />
+                <span className="font-medium text-gray-700">Specific Next Date</span>
+              </label>
+
+              <label className="inline-flex items-center gap-3 px-4 py-3 border-2 border-gray-200 rounded-xl cursor-pointer hover:bg-orange-50 transition-colors"
+                style={{ borderColor: paymentForm.recurringMode === "interval" ? "#f97316" : "" }}>
+                <input
+                  type="radio"
+                  name="recurringMode"
+                  value="interval"
+                  checked={paymentForm.recurringMode === "interval"}
+                  onChange={(e) => onRecurringModeChange(e.target.value)}
+                  className="w-4 h-4 accent-orange-600"
+                />
+                <span className="font-medium text-gray-700">Interval Based</span>
+              </label>
+            </div>
+          </div>
+
+          {/* Date Mode: Next Execution Date */}
+          {paymentForm.recurringMode === "date" && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Next Execution Date *</label>
+              <input
+                type="date"
+                value={paymentForm.nextExecutionDate}
+                onChange={(e) => onNextExecutionDateChange(e.target.value)}
+                className="w-full max-w-xs border-2 border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-orange-600 transition-colors"
+                required
+              />
+              <p className="text-xs text-gray-500 mt-1">Payment will start on this date</p>
+            </div>
+          )}
+
+          {/* Interval Mode: Value and Unit */}
+          {paymentForm.recurringMode === "interval" && (
+            <div className="grid gap-4 grid-cols-2 max-w-md">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Interval Value *</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={paymentForm.intervalValue}
+                  onChange={(e) => onIntervalValueChange(e.target.value)}
+                  className="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-orange-600 transition-colors"
+                  placeholder="1"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Interval Unit *</label>
+                <select
+                  value={paymentForm.intervalUnit}
+                  onChange={(e) => onIntervalUnitChange(e.target.value)}
+                  className="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-orange-600 transition-colors"
+                  required
+                >
+                  <option value="days">Days</option>
+                  <option value="months">Months</option>
+                </select>
+              </div>
             </div>
           )}
         </div>

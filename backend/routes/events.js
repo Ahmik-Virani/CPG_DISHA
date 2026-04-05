@@ -9,7 +9,7 @@ import {
   markEventDone,
   deleteEventById,
   listBanks,
-  getLatestPaymentRequestTypeByEventIds,
+  getAllPaymentRequestTypesByEventIds,
   listPaymentRequestIdsBySystemHead,
   listPaymentProcessedByPaymentRequestIds,
   listPaymentRequestContextsByIds,
@@ -78,17 +78,17 @@ router.get("/banks/options", requireAuth, requireRole("system_head"), async (_re
 
 router.get("/", requireAuth, requireRole("system_head"), async (req, res) => {
   const events = await listEventsBySystemHeadId(req.auth.sub);
-  const typeByEventId = await getLatestPaymentRequestTypeByEventIds(
+  const typesByEventId = await getAllPaymentRequestTypesByEventIds(
     events.map((event) => event.id),
     req.auth.sub
   );
 
-  const eventsWithPaymentType = events.map((event) => ({
+  const eventsWithPaymentTypes = events.map((event) => ({
     ...event,
-    paymentRequestType: typeByEventId.get(event.id) || null,
+    paymentRequestTypes: Array.from(typesByEventId.get(event.id) || new Set()),
   }));
 
-  return res.json({ events: eventsWithPaymentType });
+  return res.json({ events: eventsWithPaymentTypes });
 });
 
 router.get("/transactions/history", requireAuth, requireRole("system_head"), async (req, res) => {

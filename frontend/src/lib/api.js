@@ -76,6 +76,12 @@ export const eventApi = {
   remove: (token, eventId) => apiRequest("/events/" + eventId, { method: "DELETE" }, token),
   createPaymentRequest: (token, eventId, data) =>
     apiRequest("/events/" + eventId + "/payment-requests", { method: "POST", body: JSON.stringify(data) }, token),
+  deleteRecurringPaymentRequest: (token, paymentRequestId) =>
+    apiRequest("/events/recurring-payment-requests/" + paymentRequestId, { method: "DELETE" }, token),
+  deleteFixedPaymentRequest: (token, paymentRequestId) =>
+    apiRequest("/events/fixed-payment-requests/" + paymentRequestId, { method: "DELETE" }, token),
+  deleteOneTimePaymentRequest: (token, paymentRequestId) =>
+    apiRequest("/events/one-time-payment-requests/" + paymentRequestId, { method: "DELETE" }, token),
   getTransactionHistory: (token, eventId) =>
     apiRequest("/events/transactions/history" + (eventId ? "?eventId=" + eventId : ""), { method: "GET" }, token),
 };

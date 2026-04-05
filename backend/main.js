@@ -9,9 +9,11 @@ import express from "express";
 import cors from "cors";
 import { PORT, JWT_SECRET } from "./config.js";
 import { connectMongoWithRetry } from "./db.js";
+import { startRecurringPaymentScheduler } from "./scheduler.js";
 import authRoutes from "./routes/auth.js";
 import eventRoutes from "./routes/events.js";
 import paymentRoutes from "./routes/create-payment-request.js";
+import deletePaymentRoutes from "./routes/delete-payment-request.js";
 import healthRoutes from "./routes/health.js";
 import adminRoutes from "./routes/admin.js";
 import userPaymentRoutes from "./routes/user-payments.js";
@@ -25,6 +27,7 @@ app.use("/health", healthRoutes);
 app.use("/auth", authRoutes);
 app.use("/events", eventRoutes);
 app.use("/events", paymentRoutes);
+app.use("/events", deletePaymentRoutes);
 app.use("/admin", adminRoutes);
 app.use("/user-payments", userPaymentRoutes);
 
@@ -46,6 +49,7 @@ function startServer() {
   });
 
   void connectMongoWithRetry();
+  void startRecurringPaymentScheduler();
 }
 
 startServer();
