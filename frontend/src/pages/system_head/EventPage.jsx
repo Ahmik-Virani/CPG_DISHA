@@ -31,6 +31,10 @@ export default function EventPage() {
     amount: "",
     timeToLive: "",
     isAmountFixed: false,
+    recurringMode: "date",
+    nextExecutionDate: "",
+    intervalValue: "1",
+    intervalUnit: "months",
   });
   const [nextOneTimeRowId, setNextOneTimeRowId] = useState(2);
   const [paymentFeedback, setPaymentFeedback] = useState({ type: "", message: "" });
@@ -96,8 +100,60 @@ export default function EventPage() {
     }
   };
 
+  const handleDeletePaymentRequest = async () => {
+    if (!paymentRequest) return;
+    
+    const typeMessages = {
+      recurring: "Delete this recurring payment? No further recurring charges will be created.",
+      fixed: "Delete this fixed payment request?",
+      one_time: "Delete this one-time payment request?",
+    };
+
+    const confirmMsg = typeMessages[paymentRequest.type] || "Delete this payment request?";
+    if (!window.confirm(confirmMsg)) return;
+
+    setIsActing(true);
+    setError("");
+    try {
+      if (paymentRequest.type === "recurring") {
+        await eventApi.deleteRecurringPaymentRequest(token, paymentRequest.id);
+      } else if (paymentRequest.type === "fixed") {
+        await eventApi.deleteFixedPaymentRequest(token, paymentRequest.id);
+      } else if (paymentRequest.type === "one_time") {
+        await eventApi.deleteOneTimePaymentRequest(token, paymentRequest.id);
+      }
+      
+      const nextPaymentData = await eventApi.getLatestPaymentRequest(token, eventId);
+      const nextPayment = nextPaymentData.paymentRequest || null;
+      
+      setPaymentRequest(nextPayment);
+      setPaymentStep("idle");
+      setError("");
+      
+      if (nextPayment) {
+        console.log(`[Delete] Next payment type available: ${nextPayment.type}`);
+      } else {
+        console.log(`[Delete] No more payment requests for this event`);
+      }
+    } catch (err) {
+      setError(err.message || "Failed to delete payment request");
+    } finally {
+      setIsActing(false);
+    }
+  };
+
   const resetPaymentForm = () => {
-    setPaymentForm({ oneTimeRows: [createOneTimeRow(1)], banks: [], amount: "", timeToLive: "", isAmountFixed: false });
+    setPaymentForm({
+      oneTimeRows: [createOneTimeRow(1)],
+      banks: [],
+      amount: "",
+      timeToLive: "",
+      isAmountFixed: false,
+      recurringMode: "date",
+      nextExecutionDate: "",
+      intervalValue: "1",
+      intervalUnit: "months",
+    });
     setNextOneTimeRowId(2);
   };
 
@@ -153,6 +209,22 @@ export default function EventPage() {
     setNextOneTimeRowId(maxRowKey + 1);
   };
 
+  const handleRecurringModeChange = (mode) => {
+    setPaymentForm((prev) => ({ ...prev, recurringMode: mode }));
+  };
+
+  const handleNextExecutionDateChange = (date) => {
+    setPaymentForm((prev) => ({ ...prev, nextExecutionDate: date }));
+  };
+
+  const handleIntervalValueChange = (value) => {
+    setPaymentForm((prev) => ({ ...prev, intervalValue: value }));
+  };
+
+  const handleIntervalUnitChange = (unit) => {
+    setPaymentForm((prev) => ({ ...prev, intervalUnit: unit }));
+  };
+
   const handlePaymentFormCancel = () => {
     setPaymentStep("choose");
     setPaymentFeedback({ type: "", message: "" });
@@ -190,6 +262,38 @@ export default function EventPage() {
           return;
         }
         payload.amount = amount;
+      }
+    }
+
+    if (paymentType === "recurring") {
+      const amount = Number(paymentForm.amount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        setPaymentFeedback({ type: "error", message: "Amount must be greater than 0 for recurring payments." });
+        return;
+      }
+
+      payload.isAmountFixed = true;
+      payload.amount = amount;
+      payload.recurringMode = paymentForm.recurringMode;
+
+      if (paymentForm.recurringMode === "date") {
+        if (!paymentForm.nextExecutionDate) {
+          setPaymentFeedback({ type: "error", message: "Please select a next execution date." });
+          return;
+        }
+        payload.nextExecutionDate = paymentForm.nextExecutionDate;
+      } else if (paymentForm.recurringMode === "interval") {
+        const intervalValue = Number(paymentForm.intervalValue);
+        if (!Number.isFinite(intervalValue) || intervalValue <= 0) {
+          setPaymentFeedback({ type: "error", message: "Interval value must be greater than 0." });
+          return;
+        }
+        if (!["days", "months"].includes(paymentForm.intervalUnit)) {
+          setPaymentFeedback({ type: "error", message: "Please select a valid interval unit." });
+          return;
+        }
+        payload.intervalValue = intervalValue;
+        payload.intervalUnit = paymentForm.intervalUnit;
       }
     }
 
@@ -319,7 +423,24 @@ export default function EventPage() {
 
               {/* Payment request details */}
               {paymentRequest && showPaymentDetails && (
-                <PaymentRequestDetails paymentRequest={paymentRequest} formatPaymentType={formatPaymentType} />
+                <div>
+                  <PaymentRequestDetails paymentRequest={paymentRequest} formatPaymentType={formatPaymentType} />
+                  {paymentRequest && (
+                    <div className="mt-4 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={handleDeletePaymentRequest}
+                        disabled={isActing}
+                        className="px-4 py-2 rounded-lg text-sm font-medium border border-red-200 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                      >
+                        Delete {formatPaymentType(paymentRequest.type)} Payment
+                      </button>
+                      {paymentRequest.type === "recurring" && (
+                        <p className="text-xs text-gray-500 flex items-center">Stops future recurring charges</p>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
 
               {/* Payment type chooser */}
@@ -350,6 +471,10 @@ export default function EventPage() {
                     setPaymentForm((prev) => ({ ...prev, isAmountFixed: e.target.checked, amount: e.target.checked ? prev.amount : "" }))
                   }
                   onFixedAmountChange={(e) => setPaymentForm((prev) => ({ ...prev, amount: e.target.value }))}
+                  onRecurringModeChange={handleRecurringModeChange}
+                  onNextExecutionDateChange={handleNextExecutionDateChange}
+                  onIntervalValueChange={(value) => handleIntervalValueChange(value)}
+                  onIntervalUnitChange={(unit) => handleIntervalUnitChange(unit)}
                   onCancel={handlePaymentFormCancel}
                 />
               )}

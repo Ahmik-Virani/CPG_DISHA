@@ -71,6 +71,42 @@ export default function PaymentRequestDetails({ paymentRequest, formatPaymentTyp
             </p>
           </>
         ) : null}
+
+        {paymentRequest.type === "recurring" ? (
+          <>
+            <p>
+              <span className="font-medium">Amount:</span>{" "}
+              {typeof paymentRequest.amount === "number" ? `\u20B9${paymentRequest.amount}` : "-"}
+            </p>
+            <p>
+              <span className="font-medium">Recurrence Mode:</span>{" "}
+              {paymentRequest.recurringMode === "date" ? "Specific Date" : "Interval Based"}
+            </p>
+            {paymentRequest.recurringMode === "date" ? (
+              <p>
+                <span className="font-medium">Next Execution Date:</span>{" "}
+                {paymentRequest.nextExecutionDate ? new Date(paymentRequest.nextExecutionDate).toLocaleDateString() : "-"}
+              </p>
+            ) : null}
+            {paymentRequest.recurringMode === "interval" ? (
+              <>
+                <p>
+                  <span className="font-medium">Interval:</span> Every {paymentRequest.intervalValue} {paymentRequest.intervalUnit}
+                </p>
+                <p>
+                  <span className="font-medium">Next Execution:</span>{" "}
+                  {paymentRequest.nextExecutionDate ? new Date(paymentRequest.nextExecutionDate).toLocaleDateString() : "-"}
+                </p>
+              </>
+            ) : null}
+            <p>
+              <span className="font-medium">Status:</span>{" "}
+              <span className={paymentRequest.status === "active" ? "text-green-600" : "text-gray-500"}>
+                {paymentRequest.status === "active" ? "Active (recurring)" : "Inactive (stopped)"}
+              </span>
+            </p>
+          </>
+        ) : null}
       </div>
     </div>
   );

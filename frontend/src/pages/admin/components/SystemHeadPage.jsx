@@ -1,4 +1,5 @@
 import { Search, Plus, ArrowUpRight } from "lucide-react";
+import { Link } from "react-router-dom";
 
 export default function SystemHeadPage({
   filteredHeads,
@@ -40,17 +41,18 @@ export default function SystemHeadPage({
       ) : filteredHeads.length > 0 ? (
         <div className="grid grid-cols-3 gap-6">
           {filteredHeads.map((sh) => (
-            <div
+            <Link
               key={sh.id}
-              className="group relative bg-white p-6 rounded-2xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer"
+              to={`/admin/system-head/${sh.id}/payment-history`}
+              className="group relative bg-white p-6 rounded-2xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer block"
             >
-              <div className="absolute top-6 right-6 opacity-0 translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
+              <div className="absolute top-6 right-6 opacity-0 translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 pointer-events-none">
                 <ArrowUpRight size={18} className="text-gray-600" />
               </div>
 
               <h3 className="font-semibold text-lg mb-1">{sh.name}</h3>
               <p className="text-gray-500 text-sm">{sh.email}</p>
-            </div>
+            </Link>
           ))}
         </div>
       ) : (

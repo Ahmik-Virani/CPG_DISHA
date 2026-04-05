@@ -8,6 +8,7 @@ import { eventApi } from "../../lib/api";
 function formatPaymentType(type) {
   if (type === "one_time") return "One-Time";
   if (type === "fixed") return "Fixed";
+  if (type === "recurring") return "Recurring";
   return "Not Set";
 }
 
@@ -24,11 +25,11 @@ export default function ManageEvent() {
   const [isLoadingEvents, setIsLoadingEvents] = useState(true);
   const [paymentTypeTab, setPaymentTypeTab] = useState("one_time");
 
-  const newEvents          = events.filter((e) => e.isOngoing && !e.paymentRequestType);
-  const currentEvents      = events.filter((e) => e.isOngoing && e.paymentRequestType);
+  const newEvents          = events.filter((e) => e.isOngoing && (!e.paymentRequestTypes || e.paymentRequestTypes.length === 0));
+  const currentEvents      = events.filter((e) => e.isOngoing && e.paymentRequestTypes && e.paymentRequestTypes.length > 0);
   const pastEvents         = events.filter((e) => !e.isOngoing);
-  const currentEventsByType = currentEvents.filter((e) => e.paymentRequestType === paymentTypeTab);
-  const pastEventsByType    = pastEvents.filter((e) => e.paymentRequestType === paymentTypeTab);
+  const currentEventsByType = currentEvents.filter((e) => (e.paymentRequestTypes || []).includes(paymentTypeTab));
+  const pastEventsByType    = pastEvents.filter((e) => (e.paymentRequestTypes || []).includes(paymentTypeTab));
 
   useEffect(() => {
     let isMounted = true;
@@ -222,6 +223,17 @@ export default function ManageEvent() {
                     >
                       Fixed
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentTypeTab("recurring")}
+                      className={`px-3.5 py-1 rounded-full text-xs font-medium transition-all duration-200 ${
+                        paymentTypeTab === "recurring"
+                          ? "bg-orange-400 text-white shadow"
+                          : "text-gray-500 hover:text-gray-900"
+                      }`}
+                    >
+                      Recurring
+                    </button>
                   </div>
                 </div>
 
@@ -238,13 +250,13 @@ export default function ManageEvent() {
                           <ArrowUpRight size={16} className="text-orange-600" />
                         </div>
                         <p className="text-base font-semibold text-gray-900 pr-5">{event.name}</p>
-                        <p className="mt-2 text-xs text-orange-700 font-medium">{formatPaymentType(event.paymentRequestType)}</p>
+                        <p className="mt-2 text-xs text-orange-700 font-medium">{(event.paymentRequestTypes || []).map(t => formatPaymentType(t)).join(", ")}</p>
                       </button>
                     ))}
                   </div>
                 ) : (
                   <div className="border border-dashed border-gray-200 rounded-xl p-6 text-center">
-                    <p className="text-sm text-gray-400">No {paymentTypeTab === "one_time" ? "One-Time" : "Fixed"} events active</p>
+                    <p className="text-sm text-gray-400">No {paymentTypeTab === "one_time" ? "One-Time" : paymentTypeTab === "fixed" ? "Fixed" : "Recurring"} events active</p>
                   </div>
                 )}
               </div>
@@ -265,7 +277,7 @@ export default function ManageEvent() {
                           <ArrowUpRight size={16} className="text-gray-400" />
                         </div>
                         <p className="text-base font-semibold text-gray-500 pr-5">{event.name}</p>
-                        <p className="mt-2 text-xs text-gray-400 font-medium">{formatPaymentType(event.paymentRequestType)}</p>
+                        <p className="mt-2 text-xs text-gray-400 font-medium">{(event.paymentRequestTypes || []).map(t => formatPaymentType(t)).join(", ")}</p>
                       </button>
                     ))}
                   </div>

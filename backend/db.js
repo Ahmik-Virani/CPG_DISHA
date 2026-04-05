@@ -8,6 +8,7 @@ let usersCollection;
 let eventsCollection;
 let fixedPaymentRequestsCollection;
 let oneTimePaymentRequestsCollection;
+let recurringPaymentRequestsCollection;
 let banksCollection;
 let paymentProcessedCollection;
 let mongoReady = false;
@@ -55,6 +56,15 @@ export function getOneTimePaymentRequestsCollection() {
   return oneTimePaymentRequestsCollection;
 }
 
+export function getRecurringPaymentRequestsCollection() {
+  if (!recurringPaymentRequestsCollection) {
+    const error = new Error("MongoDB is not connected yet");
+    error.status = 503;
+    throw error;
+  }
+  return recurringPaymentRequestsCollection;
+}
+
 export function getBanksCollection() {
   if (!banksCollection) {
     const error = new Error("MongoDB is not connected yet");
@@ -83,6 +93,13 @@ export async function findUserByEmail(email) {
 
 export async function findUserById(id) {
   return getUsersCollection().findOne({ id });
+}
+
+export async function listAllUsersByRole(role) {
+  return getUsersCollection()
+    .find({ role })
+    .project({ _id: 0, id: 1, email: 1, name: 1, rollNo: 1 })
+    .toArray();
 }
 
 export async function createUserRecord(user) {
@@ -114,6 +131,10 @@ export async function createOneTimePaymentRequestRecords(paymentRequests) {
   return paymentRequests;
 }
 
+export async function createRecurringPaymentRequestRecord(paymentRequest) {
+  await getRecurringPaymentRequestsCollection().insertOne(paymentRequest);
+  return paymentRequest;
+}
 
 export async function createPaymentProcessedRecord(paymentRecord) {
   await getPaymentProcessedCollection().insertOne(paymentRecord);
@@ -177,9 +198,10 @@ export async function listPaymentRequestContextsByIds(paymentRequestIds) {
     return [];
   }
 
-  const [fixedRequests, oneTimeRequests] = await Promise.all([
+  const [fixedRequests, oneTimeRequests, recurringRequests] = await Promise.all([
     getFixedPaymentRequestsCollection().find({ id: { $in: ids } }).toArray(),
     getOneTimePaymentRequestsCollection().find({ id: { $in: ids } }).toArray(),
+    getRecurringPaymentRequestsCollection().find({ id: { $in: ids } }).toArray(),
   ]);
 
   return [
@@ -195,6 +217,12 @@ export async function listPaymentRequestContextsByIds(paymentRequestIds) {
       createdBySystemHeadId: request.createdBySystemHeadId,
       type: request.type,
     })),
+    ...recurringRequests.map((request) => ({
+      paymentRequestId: request.id,
+      eventId: request.eventId,
+      createdBySystemHeadId: request.createdBySystemHeadId,
+      type: request.type,
+    })),
   ];
 }
 
@@ -204,7 +232,7 @@ export async function updatePaymentRequestStatusById(paymentRequestId, status) {
     updatedAt: new Date().toISOString(),
   };
 
-  const [oneTimeResult, fixedResult] = await Promise.all([
+  const [oneTimeResult, fixedResult, recurringResult] = await Promise.all([
     getOneTimePaymentRequestsCollection().findOneAndUpdate(
       { id: paymentRequestId },
       { $set: update },
@@ -215,11 +243,17 @@ export async function updatePaymentRequestStatusById(paymentRequestId, status) {
       { $set: update },
       { returnDocument: "after", projection: { _id: 0 } }
     ),
+    getRecurringPaymentRequestsCollection().findOneAndUpdate(
+      { id: paymentRequestId },
+      { $set: update },
+      { returnDocument: "after", projection: { _id: 0 } }
+    ),
   ]);
 
   const oneTime = oneTimeResult?.value || oneTimeResult || null;
   const fixed = fixedResult?.value || fixedResult || null;
-  return oneTime || fixed || null;
+  const recurring = recurringResult?.value || recurringResult || null;
+  return oneTime || fixed || recurring || null;
 }
 
 export async function listPaymentRequestIdsBySystemHead(systemHeadId, eventId) {
@@ -229,16 +263,19 @@ export async function listPaymentRequestIdsBySystemHead(systemHeadId, eventId) {
     query.eventId = normalizedEventId;
   }
 
-  const [fixedIds, oneTimeIds] = await Promise.all([
+  const [fixedIds, oneTimeIds, recurringIds] = await Promise.all([
     getFixedPaymentRequestsCollection()
       .find(query, { projection: { _id: 0, id: 1 } })
       .toArray(),
     getOneTimePaymentRequestsCollection()
       .find(query, { projection: { _id: 0, id: 1 } })
       .toArray(),
+    getRecurringPaymentRequestsCollection()
+      .find(query, { projection: { _id: 0, id: 1 } })
+      .toArray(),
   ]);
 
-  return [...new Set([...fixedIds, ...oneTimeIds].map((row) => String(row.id || "").trim()).filter(Boolean))];
+  return [...new Set([...fixedIds, ...oneTimeIds, ...recurringIds].map((row) => String(row.id || "").trim()).filter(Boolean))];
 }
 
 export async function listOneTimePaymentRequestsByBatchId(batchId, systemHeadId) {
@@ -268,6 +305,96 @@ export async function findOneTimePaymentRequestById(paymentRequestId) {
 
 export async function findFixedPaymentRequestById(paymentRequestId) {
   return getFixedPaymentRequestsCollection().findOne({ id: paymentRequestId });
+}
+
+export async function findRecurringPaymentRequestById(paymentRequestId) {
+  return getRecurringPaymentRequestsCollection().findOne({ id: paymentRequestId });
+}
+
+export async function listAllRecurringPaymentRequests() {
+  return getRecurringPaymentRequestsCollection()
+    .find({})
+    .sort({ createdAt: -1 })
+    .toArray();
+}
+
+export async function listRecurringPaymentRequestsForExecution() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  return getRecurringPaymentRequestsCollection()
+    .find({
+      status: "active",
+      nextExecutionDate: { $lte: today.toISOString() },
+    })
+    .toArray();
+}
+
+export async function updateRecurringPaymentRequestById(paymentRequestId, updateFields) {
+  const update = {
+    ...updateFields,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const result = await getRecurringPaymentRequestsCollection().findOneAndUpdate(
+    { id: paymentRequestId },
+    { $set: update },
+    {
+      returnDocument: "after",
+      projection: { _id: 0 },
+    }
+  );
+
+  if (!result) {
+    return null;
+  }
+
+  return result.value || result;
+}
+
+export async function deleteRecurringPaymentRequestById(paymentRequestId) {
+  const result = await getRecurringPaymentRequestsCollection().deleteOne({
+    id: paymentRequestId,
+  });
+  return result.deletedCount > 0;
+}
+
+export async function deleteFixedPaymentRequestById(paymentRequestId) {
+  const result = await getFixedPaymentRequestsCollection().deleteOne({
+    id: paymentRequestId,
+  });
+  return result.deletedCount > 0;
+}
+
+export async function updateRecurringEventInstanceCounter(templateEventId, newCounter) {
+  const result = await getEventsCollection().findOneAndUpdate(
+    { id: templateEventId },
+    { $set: { instanceCounter: newCounter, updatedAt: new Date().toISOString() } },
+    { returnDocument: "after", projection: { _id: 0 } }
+  );
+  return result;
+}
+
+export async function markEventAsRecurringTemplate(eventId) {
+  const result = await getEventsCollection().findOneAndUpdate(
+    { id: eventId },
+    { 
+      $set: { 
+        type: "recurring", 
+        instanceCounter: 0, 
+        updatedAt: new Date().toISOString() 
+      } 
+    },
+    { returnDocument: "after", projection: { _id: 0 } }
+  );
+  return result;
+}
+
+export async function deleteOneTimePaymentRequestById(paymentRequestId) {
+  const result = await getOneTimePaymentRequestsCollection().deleteOne({
+    id: paymentRequestId,
+  });
+  return result.deletedCount > 0;
 }
 
 export async function listBanks() {
@@ -343,14 +470,18 @@ function mergeLatestRequestsByEventId(requests, latestByEventId) {
     }
 
     const existing = latestByEventId.get(eventId);
-    if (!existing || new Date(request.createdAt || 0).getTime() > new Date(existing.createdAt || 0).getTime()) {
+    const requestTime = new Date(request.createdAt || 0).getTime();
+    const existingTime = new Date(existing?.createdAt || 0).getTime();
+    
+    if (!existing || requestTime > existingTime || 
+        (requestTime === existingTime && request.type === "recurring")) {
       latestByEventId.set(eventId, request);
     }
   });
 }
 
 export async function findLatestPaymentRequestByEventAndSystemHead(eventId, systemHeadId) {
-  const [fixedRequest, oneTimeRequest] = await Promise.all([
+  const [fixedRequest, oneTimeRequest, recurringRequest] = await Promise.all([
     getFixedPaymentRequestsCollection()
       .find({ eventId, createdBySystemHeadId: systemHeadId })
       .sort({ createdAt: -1 })
@@ -361,19 +492,19 @@ export async function findLatestPaymentRequestByEventAndSystemHead(eventId, syst
       .sort({ createdAt: -1 })
       .limit(1)
       .next(),
+    getRecurringPaymentRequestsCollection()
+      .find({ eventId, createdBySystemHeadId: systemHeadId })
+      .sort({ createdAt: -1 })
+      .limit(1)
+      .next(),
   ]);
 
-  if (!fixedRequest) {
-    return oneTimeRequest || null;
-  }
+  const requests = [fixedRequest, oneTimeRequest, recurringRequest].filter(Boolean);
+  if (!requests.length) return null;
 
-  if (!oneTimeRequest) {
-    return fixedRequest;
-  }
-
-  return new Date(fixedRequest.createdAt || 0).getTime() > new Date(oneTimeRequest.createdAt || 0).getTime()
-    ? fixedRequest
-    : oneTimeRequest;
+  return requests.reduce((latest, current) => 
+    new Date(current.createdAt || 0).getTime() > new Date(latest.createdAt || 0).getTime() ? current : latest
+  );
 }
 
 export async function getLatestPaymentRequestTypeByEventIds(eventIds, systemHeadId) {
@@ -385,7 +516,7 @@ export async function getLatestPaymentRequestTypeByEventIds(eventIds, systemHead
     return new Map();
   }
 
-  const [fixedRequests, oneTimeRequests] = await Promise.all([
+  const [fixedRequests, oneTimeRequests, recurringRequests] = await Promise.all([
     getFixedPaymentRequestsCollection()
       .find({ eventId: { $in: ids }, createdBySystemHeadId: systemHeadId })
       .sort({ createdAt: -1 })
@@ -394,11 +525,16 @@ export async function getLatestPaymentRequestTypeByEventIds(eventIds, systemHead
       .find({ eventId: { $in: ids }, createdBySystemHeadId: systemHeadId })
       .sort({ createdAt: -1 })
       .toArray(),
+    getRecurringPaymentRequestsCollection()
+      .find({ eventId: { $in: ids }, createdBySystemHeadId: systemHeadId })
+      .sort({ createdAt: -1 })
+      .toArray(),
   ]);
 
   const latestByEventId = new Map();
   mergeLatestRequestsByEventId(fixedRequests, latestByEventId);
   mergeLatestRequestsByEventId(oneTimeRequests, latestByEventId);
+  mergeLatestRequestsByEventId(recurringRequests, latestByEventId);
 
   const typeByEventId = new Map();
   latestByEventId.forEach((request, eventId) => {
@@ -406,6 +542,62 @@ export async function getLatestPaymentRequestTypeByEventIds(eventIds, systemHead
   });
 
   return typeByEventId;
+}
+
+export async function getAllPaymentRequestTypesByEventIds(eventIds, systemHeadId) {
+  const ids = Array.isArray(eventIds)
+    ? [...new Set(eventIds.map((id) => String(id || "").trim()).filter(Boolean))]
+    : [];
+
+  if (!ids.length) {
+    return new Map();
+  }
+
+  const [fixedRequests, oneTimeRequests, recurringRequests] = await Promise.all([
+    getFixedPaymentRequestsCollection()
+      .find({ eventId: { $in: ids }, createdBySystemHeadId: systemHeadId })
+      .toArray(),
+    getOneTimePaymentRequestsCollection()
+      .find({ eventId: { $in: ids }, createdBySystemHeadId: systemHeadId })
+      .toArray(),
+    getRecurringPaymentRequestsCollection()
+      .find({ eventId: { $in: ids }, createdBySystemHeadId: systemHeadId })
+      .toArray(),
+  ]);
+
+  const typesByEventId = new Map();
+
+  fixedRequests.forEach((request) => {
+    const eventId = String(request.eventId || "").trim();
+    if (eventId) {
+      if (!typesByEventId.has(eventId)) {
+        typesByEventId.set(eventId, new Set());
+      }
+      typesByEventId.get(eventId).add("fixed");
+    }
+  });
+
+  oneTimeRequests.forEach((request) => {
+    const eventId = String(request.eventId || "").trim();
+    if (eventId) {
+      if (!typesByEventId.has(eventId)) {
+        typesByEventId.set(eventId, new Set());
+      }
+      typesByEventId.get(eventId).add("one_time");
+    }
+  });
+
+  recurringRequests.forEach((request) => {
+    const eventId = String(request.eventId || "").trim();
+    if (eventId) {
+      if (!typesByEventId.has(eventId)) {
+        typesByEventId.set(eventId, new Set());
+      }
+      typesByEventId.get(eventId).add("recurring");
+    }
+  });
+
+  return typesByEventId;
 }
 
 export async function findEventByIdForSystemHead(eventId, systemHeadId) {
@@ -449,6 +641,10 @@ export async function deleteEventById(eventId, systemHeadId) {
       eventId,
       createdBySystemHeadId: systemHeadId,
     }),
+    getRecurringPaymentRequestsCollection().deleteMany({
+      eventId,
+      createdBySystemHeadId: systemHeadId,
+    }),
   ]);
 
   return eventDeleteResult;
@@ -467,6 +663,7 @@ async function connectMongo() {
   eventsCollection = db.collection("Events");
   fixedPaymentRequestsCollection = db.collection("Fixed_Payment_Request");
   oneTimePaymentRequestsCollection = db.collection("One_Time_Payment_Request");
+  recurringPaymentRequestsCollection = db.collection("Recurring_Payment_Request");
   banksCollection = db.collection("Banks");
   paymentProcessedCollection = db.collection("Payment_Processed");
   mongoReady = true;
@@ -482,6 +679,9 @@ async function connectMongo() {
   await fixedPaymentRequestsCollection.createIndex({ eventId: 1, createdBySystemHeadId: 1 });
   await oneTimePaymentRequestsCollection.createIndex({ id: 1 }, { unique: true });
   await oneTimePaymentRequestsCollection.createIndex({ eventId: 1, createdBySystemHeadId: 1 });
+  await recurringPaymentRequestsCollection.createIndex({ id: 1 }, { unique: true });
+  await recurringPaymentRequestsCollection.createIndex({ eventId: 1, createdBySystemHeadId: 1 });
+  await recurringPaymentRequestsCollection.createIndex({ status: 1, nextExecutionDate: 1 });
   await banksCollection.createIndex({ id: 1 }, { unique: true });
   await banksCollection.createIndex({ normalizedDisplayName: 1 }, { unique: true });
   await paymentProcessedCollection.createIndex({ id: 1 }, { unique: true });
@@ -525,6 +725,7 @@ export async function connectMongoWithRetry(attempt = 1) {
     eventsCollection = undefined;
     fixedPaymentRequestsCollection = undefined;
     oneTimePaymentRequestsCollection = undefined;
+    recurringPaymentRequestsCollection = undefined;
     banksCollection = undefined;
     paymentProcessedCollection = undefined;
     const delayMs = Math.min(30000, attempt * 3000);

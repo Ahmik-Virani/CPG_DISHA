@@ -47,6 +47,8 @@ export const adminApi = {
   listSystemHeads: (token) => apiRequest("/admin/system-heads", { method: "GET" }, token),
   createMerchant: (token, data) =>
     apiRequest("/admin/system-heads", { method: "POST", body: JSON.stringify(data) }, token),
+  getSystemHeadPaymentHistory: (token, systemHeadId, eventId) =>
+    apiRequest(`/admin/system-heads/${systemHeadId}/payment-history${eventId ? `?eventId=${eventId}` : ""}`, { method: "GET" }, token),
   listBanks: (token) => apiRequest("/admin/banks", { method: "GET" }, token),
   createBank: (token, data) =>
     apiRequest("/admin/banks", { method: "POST", body: JSON.stringify(data) }, token),
@@ -80,6 +82,12 @@ export const eventApi = {
       { method: "GET" },
       token
     ),
+  deleteRecurringPaymentRequest: (token, paymentRequestId) =>
+    apiRequest("/events/recurring-payment-requests/" + paymentRequestId, { method: "DELETE" }, token),
+  deleteFixedPaymentRequest: (token, paymentRequestId) =>
+    apiRequest("/events/fixed-payment-requests/" + paymentRequestId, { method: "DELETE" }, token),
+  deleteOneTimePaymentRequest: (token, paymentRequestId) =>
+    apiRequest("/events/one-time-payment-requests/" + paymentRequestId, { method: "DELETE" }, token),
 };
 
 export const userPaymentApi = {
