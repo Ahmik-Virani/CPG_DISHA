@@ -174,6 +174,12 @@ export async function listPaymentProcessedByUserId(userId) {
     .toArray();
 }
 
+export async function listPendingHashVerificationRetries() {
+  return getPaymentProcessedCollection()
+    .find({ status: "pending", pendingHashVerificationRetry: true })
+    .toArray();
+}
+
 export async function listPaymentProcessedByPaymentRequestIds(paymentRequestIds) {
   const ids = Array.isArray(paymentRequestIds)
     ? [...new Set(paymentRequestIds.map((id) => String(id || "").trim()).filter(Boolean))]
@@ -688,6 +694,7 @@ async function connectMongo() {
   await paymentProcessedCollection.createIndex({ paymentRequestId: 1 });
   await paymentProcessedCollection.createIndex({ "student.userId": 1 });
   await paymentProcessedCollection.createIndex({ createdAt: -1 });
+  await paymentProcessedCollection.createIndex({ status: 1, pendingHashVerificationRetry: 1 }, { sparse: true });
 }
 
 export async function bootstrapAdmin() {

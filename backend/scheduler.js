@@ -8,7 +8,11 @@ import {
   createEventRecord,
   updateRecurringEventInstanceCounter,
   findUserById,
+  listPendingHashVerificationRetries,
+  updatePaymentProcessedById,
+  updatePaymentRequestStatusById,
 } from "./db.js";
+import { checkIciciSaleStatus } from "./routes/bank-payment/icici.js";
 
 
 function calculateNextExecutionDate(currentDate, intervalValue, intervalUnit) {
@@ -129,14 +133,68 @@ async function processRecurringPayment(paymentRequest) {
   }
 }
 
+export async function retryPendingHashVerifications() {
+  const pendingRecords = await listPendingHashVerificationRetries();
+  if (!pendingRecords.length) {
+    console.log("[Scheduler] No pending hash verification retries");
+    return;
+  }
+
+  console.log(`[Scheduler] Retrying hash verification for ${pendingRecords.length} records`);
+
+  for (const record of pendingRecords) {
+    try {
+      const merchantTxnNo = String(record?.transaction?.transaction_id || "").trim();
+      const tranCtx = String(record?.gateway?.tranCtx || "").trim();
+      const originalTxnNo = String(record?.gateway?.originalTxnNo || "").trim() || merchantTxnNo;
+
+      const statusResult = await checkIciciSaleStatus({ merchantTxnNo, tranCtx, originalTxnNo });
+
+      if (!statusResult.hashVerified) {
+        console.log(`[Scheduler] Hash still invalid for record ${record.id}. Keeping pending.`);
+        continue;
+      }
+
+      const finalStatus = statusResult.status;
+      const dbStatusLabel = statusResult.dbStatusLabel || (finalStatus === "success" ? "SUCCESSFUL" : "FAILURE");
+
+      await updatePaymentProcessedById(record.id, {
+        status: finalStatus,
+        pendingHashVerificationRetry: false,
+        transaction: {
+          ...(record.transaction || {}),
+          status: dbStatusLabel,
+          response_code: dbStatusLabel,
+          date: new Date().toISOString(),
+        },
+        gateway: {
+          ...(record.gateway || {}),
+          statusRequestPacket: statusResult.requestPacket,
+          statusResponsePacket: statusResult.responsePacket,
+          txnRespDescription: statusResult.txnRespDescription || null,
+        },
+      });
+
+      if (finalStatus === "success" || finalStatus === "failed") {
+        await updatePaymentRequestStatusById(record.paymentRequestId, finalStatus);
+      }
+
+      console.log(`[Scheduler] Resolved record ${record.id} to status: ${finalStatus}`);
+    } catch (err) {
+      console.error(`[Scheduler] Error retrying hash verification for ${record?.id}:`, err);
+    }
+  }
+}
+
 export function startRecurringPaymentScheduler() {
   const task = cron.schedule('0 0 * * *', async () => {
     const now = new Date().toISOString();
     console.log(`[Scheduler] Cron job triggered at ${now} - Starting recurring payment execution`);
     await executeRecurringPayments();
+    await retryPendingHashVerifications();
   }, {
     scheduled: true,
-    timezone: "Asia/Kolkata" 
+    timezone: "Asia/Kolkata"
   });
 
   console.log("[Scheduler] Recurring payment scheduler started (Cron: 0 0 * * * - Daily at midnight)");

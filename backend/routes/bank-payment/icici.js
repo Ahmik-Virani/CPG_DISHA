@@ -223,6 +223,8 @@ export async function initiateIciciSale({ amount, returnURL, userEmail }) {
 
   const responsePacket = await initiateSaleResponse.json().catch(() => ({}));
   console.log("[ICICI initiateSale] responsePacket:\n" + JSON.stringify(responsePacket, null, 2));
+  console.log("[ICICI initiateSale] verifying response secureHash...");
+  verifyResponseSecureHash(responsePacket);
 
   if (!initiateSaleResponse.ok) {
     throw buildHttpError(502, "Failed to initiate sale with ICICI", {
@@ -334,8 +336,10 @@ export async function checkIciciSaleStatus({
   const statusSignal = findTxnStatus(responsePacket);
   const txnRespDescription = findTxnRespDescription(responsePacket);
   const isSuccessful = txnRespDescription.toLowerCase() === "transaction successful";
+  const hashVerified = verifyResponseSecureHash(responsePacket);
 
   return {
+    hashVerified,
     status: isSuccessful ? "success" : "failed",
     dbStatusLabel: isSuccessful ? "SUCCESSFUL" : "FAILURE",
     statusSignal,
@@ -343,4 +347,55 @@ export async function checkIciciSaleStatus({
     requestPacket,
     responsePacket,
   };
+}
+
+function verifyResponseSecureHash(responsePacket) {
+  const receivedHash = String(responsePacket?.secureHash || "").trim();
+  if (!receivedHash) {
+    console.log("[ICICI hashVerify] No secureHash in response — treating as tampered");
+    return false;
+  }
+
+  // oth_charge is appended by ICICI after the hash is computed (bank-side charge),
+  // so it must be excluded from hash verification.
+  const POST_HASH_FIELDS = new Set(["secureHash", "oth_charge"]);
+  const rest = Object.fromEntries(
+    Object.entries(responsePacket).filter(([k]) => !POST_HASH_FIELDS.has(k))
+  );
+
+  // ICICI V1: sort keys alphabetically (case-sensitive), concatenate non-null values
+  const sortedKeys = Object.keys(rest).sort();
+  const sortedValues = sortedKeys.map((k) => String(rest[k] ?? "")).join("");
+  const hashSorted = buildSecureHashFromConcatenatedValues(sortedValues);
+
+  // Fallback: sorted, also skip boolean false / empty string values
+  const hashSortedSkipFalsy = buildSecureHashFromConcatenatedValues(
+    sortedKeys.filter((k) => rest[k] !== null && rest[k] !== "" && rest[k] !== false && rest[k] !== undefined)
+      .map((k) => String(rest[k])).join("")
+  );
+
+  // Fallback: JSON insertion order (in case ICICI uses response order)
+  const insertionValues = Object.values(rest).map((v) => String(v ?? "")).join("");
+  const hashInsertion = buildSecureHashFromConcatenatedValues(insertionValues);
+
+  console.log(`[ICICI hashVerify] received     = ${receivedHash}`);
+  console.log(`[ICICI hashVerify] hash (sorted)= ${hashSorted}  match=${hashSorted === receivedHash}`);
+
+  const attempts = [
+    ["sorted", hashSorted],
+    ["sorted/skip-falsy", hashSortedSkipFalsy],
+    ["insertion", hashInsertion],
+  ];
+
+  for (const [label, hash] of attempts) {
+    if (hash.length === receivedHash.length &&
+      crypto.timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(receivedHash, "hex"))) {
+      console.log(`[ICICI hashVerify] VERIFIED via ${label}`);
+      return true;
+    }
+  }
+
+  console.log(`[ICICI hashVerify] FAILED — keys used: ${sortedKeys.join(",")}`);
+  console.log(`[ICICI hashVerify] concat: ${sortedValues}`);
+  return false;
 }

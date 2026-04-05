@@ -339,11 +339,31 @@ router.post("/verify-status", requireAuth, requireRole("user"), async (req, res)
       originalTxnNo,
     });
 
+    if (!statusResult.hashVerified) {
+      const updatedPaymentRecord = await updatePaymentProcessedById(paymentRecord.id, {
+        pendingHashVerificationRetry: true,
+        gateway: {
+          ...(paymentRecord.gateway || {}),
+          tranCtx: paymentRecord?.gateway?.tranCtx || null,
+          originalTxnNo,
+          statusRequestPacket: statusResult.requestPacket,
+          statusResponsePacket: statusResult.responsePacket,
+        },
+      });
+
+      return res.json({
+        status: "pending",
+        paymentRecord: updatedPaymentRecord || paymentRecord,
+        message: "Payment status could not be verified. Will retry automatically.",
+      });
+    }
+
     const finalStatus = statusResult.status;
     const dbStatusLabel = statusResult.dbStatusLabel || (finalStatus === "success" ? "SUCCESSFUL" : "FAILURE");
 
     const updatedPaymentRecord = await updatePaymentProcessedById(paymentRecord.id, {
       status: finalStatus,
+      pendingHashVerificationRetry: false,
       transaction: {
         ...(paymentRecord.transaction || {}),
         status: dbStatusLabel,
