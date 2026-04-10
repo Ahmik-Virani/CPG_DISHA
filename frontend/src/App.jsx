@@ -5,6 +5,7 @@ import Admin from "./pages/admin/Admin";
 import SystemHeadPaymentHistory from "./pages/admin/components/SystemHeadPaymentHistory";
 import User from "./pages/user/User";
 import PaymentDetails from "./pages/user/PaymentDetails";
+import Receipt from "./pages/user/Receipt";
 import SystemHead from "./pages/system_head/System_Head";
 import ManageEvent from "./pages/system_head/ManageEvent";
 import EventPage from "./pages/system_head/EventPage";
@@ -64,6 +65,15 @@ function App() {
         element={
           <ProtectedRoute allowedRoles={["user"]}>
             <PaymentDetails />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/user/receipt/:paymentId"
+        element={
+          <ProtectedRoute allowedRoles={["user"]}>
+            <Receipt />
           </ProtectedRoute>
         }
       />

@@ -98,7 +98,12 @@ export default function PaymentDetails() {
       .then((data) => {
         const finalStatus = String(data?.status || "pending").toLowerCase();
         if (finalStatus === "success") {
-          setPayStatusMessage("Payment successful. Status synced.");
+          setPayStatusMessage("Payment successful. Redirecting to receipt...");
+          setTimeout(() => {
+            navigate(`/user/receipt/${request.id}`, { 
+              state: { fromPaymentSuccess: true }
+            });
+          }, 1500);
         } else if (finalStatus === "failed") {
           setPayError("Payment failed. Please try again.");
         } else {
@@ -302,6 +307,7 @@ export default function PaymentDetails() {
             {status === "success" && (
               <button
                 type="button"
+                onClick={() => navigate(`/user/receipt/${request.id}`)}
                 className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 px-6 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
               >
                 <FileText size={15} /> Open Receipt

@@ -1,6 +1,6 @@
 import { Clock, History, Layers, CalendarClock } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../../context/AuthContext";
 import Header from "../../components/Header";
 import { userPaymentApi } from "../../lib/api";
@@ -26,6 +26,7 @@ export default function User() {
   const [redirectVerifyLoading, setRedirectVerifyLoading] = useState(false);
   const [redirectVerifyMessage, setRedirectVerifyMessage] = useState("");
   const [redirectVerifyError, setRedirectVerifyError] = useState("");
+  const hasRedirectedToReceipt = useRef(false);
 
   const pendingRequestsWithStatus = pendingRequests
     .map((request) => {
@@ -109,6 +110,12 @@ export default function User() {
       .then((data) => {
         const finalStatus = String(data?.status || "pending").toLowerCase();
         if (finalStatus === "success") {
+          const targetPaymentId = data?.paymentRecord?.id || paymentRecordId || paymentRequestId;
+          if (targetPaymentId) {
+            hasRedirectedToReceipt.current = true;
+            navigate(`/user/receipt/${targetPaymentId}`, { replace: true });
+            return;
+          }
           setRedirectVerifyMessage("Payment successful. Status synced.");
         } else if (finalStatus === "failed") {
           setRedirectVerifyError("Payment failed. Please try again.");
@@ -127,8 +134,10 @@ export default function User() {
         if (typeof window !== "undefined") {
           window.localStorage.removeItem("cpg:lastPaymentRecordId");
           window.localStorage.removeItem("cpg:lastPaymentRequestId");
+          if (!hasRedirectedToReceipt.current) {
+            window.history.replaceState({}, document.title, "/user");
+          }
         }
-        navigate("/user", { replace: true });
       });
   }, [location.search, navigate, token]);
 
@@ -326,8 +335,17 @@ export default function User() {
                       {historyRequests.map((entry) => {
                         const amount = Number(entry?.transaction?.amount);
                         const status = String(entry?.status || "pending").toLowerCase();
+                        const isClickable = status === "success" || status === "paid";
                         return (
-                          <tr key={entry.id || entry.transaction?.transaction_id} className="border-t border-gray-100">
+                          <tr
+                            key={entry.id || entry.transaction?.transaction_id}
+                            className={`border-t border-gray-100 ${isClickable ? "cursor-pointer hover:bg-orange-50 transition-colors" : ""}`}
+                            onClick={() => {
+                              if (isClickable && entry.id) {
+                                navigate(`/user/receipt/${entry.id}`);
+                              }
+                            }}
+                          >
                             <td className="px-4 py-3 text-gray-800">{entry.eventName || "Unknown Event"}</td>
                             <td className="px-4 py-3 text-gray-700">
                               {Number.isFinite(amount) ? `₹${amount.toLocaleString("en-IN")}` : "-"}
