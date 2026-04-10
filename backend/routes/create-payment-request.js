@@ -192,6 +192,10 @@ router.post(
       }));
 
       await createOneTimePaymentRequestRecords(paymentRequests);
+      console.log(
+        `[Create Payment] Created ${paymentRequests.length} one-time payment(s) for event ${eventId} ` +
+        `(SystemID: ${systemHeadId}, Amounts: ${paymentRequests.map(p => p.amount).join(', ')})`
+      );
 
       // Check if this one-time payment should be marked as recurring
       const isRecurring = req.body?.isRecurring === true;
@@ -284,6 +288,10 @@ router.post(
       };
 
       await createFixedPaymentRequestRecord(paymentRequest);
+      console.log(
+        `[Create Payment] Created fixed payment request ${paymentRequest.id} for event ${eventId} ` +
+        `(SystemID: ${systemHeadId}, isAmountFixed: ${isAmountFixed}, amount: ${isAmountFixed ? amount : 'variable'})`
+      );
       return res.status(201).json({ paymentRequest, table: "Fixed_Payment_Request" });
     }
   }

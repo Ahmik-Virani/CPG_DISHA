@@ -170,9 +170,14 @@ router.delete("/:eventId", requireAuth, requireRole("system_head"), async (req, 
 
   // Log the deletion with associated resources
   const deletedTemplateIds = result.deletedTemplateIds || [];
+  const deletedFixedCount = result.deletedFixedPaymentRequestCount || 0;
+  const deletedOneTimeCount = result.deletedOneTimePaymentRequestCount || 0;
+  const deletedRecurringCount = result.deletedRecurringTemplateCount || 0;
+  
   console.log(
     `[Event] Deleted event ${req.params.eventId} - SystemID: ${req.auth.sub}, ` +
-    `DeletedTemplates: ${deletedTemplateIds.length}`
+    `DeletedFixedPayments: ${deletedFixedCount}, DeletedOneTimePayments: ${deletedOneTimeCount}, ` +
+    `DeletedRecurringTemplates: ${deletedRecurringCount}`
   );
 
   return res.json({ message: "Event deleted successfully" });

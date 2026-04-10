@@ -574,7 +574,7 @@ export async function deleteEventById(eventId, systemHeadId) {
     return eventDeleteResult;
   }
 
-  await Promise.all([
+  const [fixedResult, oneTimeResult, recurringResult] = await Promise.all([
     getFixedPaymentRequestsCollection().deleteMany({
       eventId,
       createdBySystemHeadId: systemHeadId,
@@ -589,7 +589,13 @@ export async function deleteEventById(eventId, systemHeadId) {
     }),
   ]);
 
-  return { ...eventDeleteResult, deletedTemplateIds: templateIds };
+  return {
+    ...eventDeleteResult,
+    deletedTemplateIds: templateIds,
+    deletedFixedPaymentRequestCount: fixedResult.deletedCount,
+    deletedOneTimePaymentRequestCount: oneTimeResult.deletedCount,
+    deletedRecurringTemplateCount: recurringResult.deletedCount,
+  };
 }
 
 async function connectMongo() {
