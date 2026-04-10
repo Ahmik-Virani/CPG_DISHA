@@ -3,16 +3,13 @@ import { Router } from "express";
 import { normalizeRollNo } from "../utils.js";
 import {
   findEventByIdForSystemHead,
-  createEventRecord,
   createOneTimePaymentRequestRecords,
   createFixedPaymentRequestRecord,
-  createRecurringPaymentRequestRecord,
+  createRecurringTemplateRecord,
   findLatestPaymentRequestByEventAndSystemHead,
   findUserById,
   listOneTimePaymentRequestsByBatchId,
   listBanks,
-  updateRecurringEventInstanceCounter,
-  markEventAsRecurringTemplate,
 } from "../db.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 
@@ -151,8 +148,8 @@ router.post(
       });
     }
 
-    if (!["one_time", "fixed", "recurring"].includes(type)) {
-      return res.status(400).json({ message: "type must be one of one_time, fixed, or recurring" });
+    if (!["one_time", "fixed"].includes(type)) {
+      return res.status(400).json({ message: "type must be one of one_time or fixed" });
     }
 
     if (!banks.length) {
@@ -195,6 +192,58 @@ router.post(
       }));
 
       await createOneTimePaymentRequestRecords(paymentRequests);
+
+      // Check if this one-time payment should be marked as recurring
+      const isRecurring = req.body?.isRecurring === true;
+      let recurringTemplate = null;
+
+      if (isRecurring) {
+        // Validate recurring options
+        const intervalValue = Number(req.body?.intervalValue);
+        const intervalUnit = String(req.body?.intervalUnit || "").trim().toLowerCase();
+
+        if (!Number.isFinite(intervalValue) || intervalValue <= 0) {
+          return res.status(400).json({
+            message: "intervalValue must be a positive number for recurring one-time payments",
+          });
+        }
+
+        if (!["days", "months"].includes(intervalUnit)) {
+          return res.status(400).json({
+            message: "intervalUnit must be either 'days' or 'months' for recurring one-time payments",
+          });
+        }
+
+        // Calculate next execution date
+        const nextExecutionDate = calculateNextExecutionDate(new Date(), intervalValue, intervalUnit).toISOString();
+
+        // Create recurring template with all necessary data
+        recurringTemplate = {
+          id: crypto.randomUUID(),
+          eventId,
+          createdBySystemHeadId: systemHeadId,
+          entries: entries.map(e => ({ rollNo: e.rollNo, amount: e.amount })),
+          bank: banks[0],
+          banks,
+          originalTimeToLive: ttl.toISOString(),
+          originalCreationDate: now,
+          intervalValue,
+          intervalUnit,
+          status: "active",
+          nextExecutionDate,
+          createdAt: now,
+          updatedAt: now,
+          lastGeneratedAt: null,
+          lastGeneratedPaymentIds: [],
+        };
+
+        await createRecurringTemplateRecord(recurringTemplate);
+        console.log(
+          `[Create Payment] Created recurring template ${recurringTemplate.id} for one-time payment ` +
+          `(Event: ${eventId}, Interval: ${intervalValue} ${intervalUnit})`
+        );
+      }
+
       return res.status(201).json({
         paymentRequests,
         paymentRequest: {
@@ -205,6 +254,7 @@ router.post(
           })),
         },
         table: "One_Time_Payment_Request",
+        recurringTemplate: recurringTemplate ? { id: recurringTemplate.id } : null,
       });
     }
 
@@ -235,143 +285,6 @@ router.post(
 
       await createFixedPaymentRequestRecord(paymentRequest);
       return res.status(201).json({ paymentRequest, table: "Fixed_Payment_Request" });
-    }
-
-    if (type === "recurring") {
-      const isAmountFixed = req.body?.isAmountFixed;
-      if (isAmountFixed !== true) {
-        return res.status(400).json({ message: "Recurring payments must have isAmountFixed set to true" });
-      }
-
-      const amount = Number(req.body?.amount);
-      if (!Number.isFinite(amount) || amount <= 0) {
-        return res.status(400).json({ message: "amount must be greater than 0 for recurring requests" });
-      }
-
-      const recurringMode = String(req.body?.recurringMode || "").trim().toLowerCase();
-      if (!["date", "interval"].includes(recurringMode)) {
-        return res.status(400).json({ message: "recurringMode must be either 'date' or 'interval'" });
-      }
-
-      let nextExecutionDate = null;
-      let intervalValue = null;
-      let intervalUnit = null;
-
-      if (recurringMode === "date") {
-        const nextDateRaw = String(req.body?.nextExecutionDate || "").trim();
-        const nextDate = new Date(nextDateRaw);
-
-        if (!nextDateRaw || Number.isNaN(nextDate.getTime())) {
-          return res.status(400).json({
-            message: "nextExecutionDate is required and must be a valid date when recurringMode is 'date'",
-          });
-        }
-
-        if (req.body?.intervalValue !== null && req.body?.intervalValue !== undefined) {
-          return res.status(400).json({
-            message: "intervalValue should not be provided when recurringMode is 'date'",
-          });
-        }
-        if (req.body?.intervalUnit !== null && req.body?.intervalUnit !== undefined) {
-          return res.status(400).json({
-            message: "intervalUnit should not be provided when recurringMode is 'date'",
-          });
-        }
-
-        nextExecutionDate = nextDate.toISOString();
-      } else if (recurringMode === "interval") {
-        intervalValue = Number(req.body?.intervalValue);
-        intervalUnit = String(req.body?.intervalUnit || "").trim().toLowerCase();
-
-        if (!Number.isFinite(intervalValue) || intervalValue <= 0) {
-          return res.status(400).json({
-            message: "intervalValue must be a positive number when recurringMode is 'interval'",
-          });
-        }
-
-        if (!["days", "months"].includes(intervalUnit)) {
-          return res.status(400).json({
-            message: "intervalUnit must be either 'days' or 'months' when recurringMode is 'interval'",
-          });
-        }
-
-        if (req.body?.nextExecutionDate !== null && req.body?.nextExecutionDate !== undefined) {
-          return res.status(400).json({
-            message: "nextExecutionDate should not be provided when recurringMode is 'interval'",
-          });
-        }
-
-        nextExecutionDate = calculateNextExecutionDate(new Date(), intervalValue, intervalUnit).toISOString();
-      }
-
-      const now = new Date().toISOString();
-      
-      const paymentRequest = {
-        id: crypto.randomUUID(),
-        createdBySystemHeadId: systemHeadId,
-        eventId,
-        type: "recurring",
-        recurringMode,
-        nextExecutionDate,
-        intervalValue,
-        intervalUnit,
-        bank: banks[0],
-        banks,
-        amount,
-        status: "active",
-        lastExecutedAt: null,
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      await createRecurringPaymentRequestRecord(paymentRequest);
-
-      await markEventAsRecurringTemplate(eventId);
-
-      const systemHead = await findUserById(systemHeadId);
-      const instanceNumber = 1;
-      const instanceEventName = `${event.name} #${instanceNumber}`;
-      
-      const instanceEvent = {
-        id: crypto.randomUUID(),
-        name: instanceEventName,
-        description: event.description,
-        createdBySystemHeadId: systemHeadId,
-        createdBySystemHeadName: systemHead?.name || "",
-        isOngoing: true,
-        type: "fixed",
-        templateEventId: eventId, 
-        instanceNumber: instanceNumber,
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      await createEventRecord(instanceEvent);
-
-      const instantFixedPaymentRequest = {
-        id: crypto.randomUUID(),
-        createdBySystemHeadId: systemHeadId,
-        eventId: instanceEvent.id, 
-        type: "fixed",
-        bank: banks[0],
-        banks,
-        isAmountFixed: true,
-        amount,
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      await createFixedPaymentRequestRecord(instantFixedPaymentRequest);
-      
-      console.log(`[Create Payment] Created recurring template event ${eventId}, instance #${instanceNumber} event ${instanceEvent.id}`);
-
-      return res.status(201).json({ 
-        paymentRequest, 
-        table: "Recurring_Payment_Request", 
-        templateEventId: eventId,
-        instanceEventId: instanceEvent.id,
-        instanceNumber: instanceNumber,
-      });
     }
   }
 );

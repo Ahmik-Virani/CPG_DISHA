@@ -82,8 +82,6 @@ export const eventApi = {
       { method: "GET" },
       token
     ),
-  deleteRecurringPaymentRequest: (token, paymentRequestId) =>
-    apiRequest("/events/recurring-payment-requests/" + paymentRequestId, { method: "DELETE" }, token),
   deleteFixedPaymentRequest: (token, paymentRequestId) =>
     apiRequest("/events/fixed-payment-requests/" + paymentRequestId, { method: "DELETE" }, token),
   deleteOneTimePaymentRequest: (token, paymentRequestId) =>

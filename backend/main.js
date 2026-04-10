@@ -9,7 +9,7 @@ import express from "express";
 import cors from "cors";
 import { PORT, JWT_SECRET } from "./config.js";
 import { connectMongoWithRetry } from "./db.js";
-import { startRecurringPaymentScheduler } from "./scheduler.js";
+import { startRecurringTemplatesScheduler } from "./scheduler.js";
 import authRoutes from "./routes/auth.js";
 import eventRoutes from "./routes/events.js";
 import paymentRoutes from "./routes/create-payment-request.js";
@@ -49,7 +49,7 @@ function startServer() {
   });
 
   void connectMongoWithRetry();
-  void startRecurringPaymentScheduler();
+  void startRecurringTemplatesScheduler();
 }
 
 startServer();

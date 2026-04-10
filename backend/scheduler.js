@@ -1,20 +1,19 @@
 import crypto from "node:crypto";
 import cron from "node-cron";
 import {
-  listRecurringPaymentRequestsForExecution,
-  updateRecurringPaymentRequestById,
-  createFixedPaymentRequestRecord,
+  listRecurringTemplatesForExecution,
+  updateRecurringTemplateById,
+  createOneTimePaymentRequestRecords,
   findEventByIdForSystemHead,
-  createEventRecord,
-  updateRecurringEventInstanceCounter,
-  findUserById,
   listPendingHashVerificationRetries,
   updatePaymentProcessedById,
   updatePaymentRequestStatusById,
 } from "./db.js";
 import { checkIciciSaleStatus } from "./routes/bank-payment/icici.js";
 
-
+/**
+ * Calculate next execution date based on interval
+ */
 function calculateNextExecutionDate(currentDate, intervalValue, intervalUnit) {
   const nextDate = new Date(currentDate);
   if (intervalUnit === "days") {
@@ -25,114 +24,102 @@ function calculateNextExecutionDate(currentDate, intervalValue, intervalUnit) {
   return nextDate;
 }
 
-export async function executeRecurringPayments() {
+/**
+ * Execute recurring templates to generate new one-time payments
+ */
+export async function executeRecurringTemplates() {
   try {
-    const recurringPayments = await listRecurringPaymentRequestsForExecution();
+    const templates = await listRecurringTemplatesForExecution();
 
-    if (!recurringPayments.length) {
-      console.log("[Scheduler] No recurring payments to execute");
+    if (!templates.length) {
+      console.log("[Scheduler] No recurring templates to execute");
       return;
     }
 
-    console.log(`[Scheduler] Processing ${recurringPayments.length} recurring payments`);
+    console.log(`[Scheduler] Processing ${templates.length} recurring templates`);
 
-    for (const payment of recurringPayments) {
-      await processRecurringPayment(payment);
+    for (const template of templates) {
+      await processRecurringTemplate(template);
     }
 
-    console.log("[Scheduler] Recurring payments execution completed");
+    console.log("[Scheduler] Recurring templates execution completed");
   } catch (error) {
-    console.error("[Scheduler] Error executing recurring payments:", error);
+    console.error("[Scheduler] Error executing recurring templates:", error);
   }
 }
 
-async function processRecurringPayment(paymentRequest) {
+/**
+ * Process a single recurring template to generate new one-time payments
+ */
+async function processRecurringTemplate(template) {
   try {
     const {
-      id: paymentRequestId,
-      amount,
+      id: templateId,
+      eventId,
+      createdBySystemHeadId,
+      entries,
       bank,
       banks,
-      recurringMode,
+      originalTimeToLive,
+      originalCreationDate,
       intervalValue,
       intervalUnit,
-      eventId: templateEventId,
-      createdBySystemHeadId,
-    } = paymentRequest;
+    } = template;
 
-    const now = new Date().toISOString();
-
-    const templateEvent = await findEventByIdForSystemHead(templateEventId, createdBySystemHeadId);
-    if (!templateEvent) {
-      console.error(`[Scheduler] Template event ${templateEventId} not found`);
+    // Verify the event still exists
+    const event = await findEventByIdForSystemHead(eventId, createdBySystemHeadId);
+    if (!event) {
+      console.log(`[Scheduler] Event ${eventId} not found for template ${templateId}. Deactivating template.`);
+      await updateRecurringTemplateById(templateId, { status: "inactive" });
       return;
     }
 
-    const nextInstanceNumber = (templateEvent.instanceCounter || 0) + 1;
-    const instanceEventName = `${templateEvent.name} #${nextInstanceNumber}`;
-
-    const systemHead = await findUserById(createdBySystemHeadId);
-    const instanceEvent = {
+    const now = new Date();
+    const nowISO = now.toISOString();
+    const originalCreation = new Date(originalCreationDate);
+    const originalTTL = new Date(originalTimeToLive);
+    const duration = originalTTL.getTime() - originalCreation.getTime();
+    const newTimeToLive = new Date(now.getTime() + duration);
+    const paymentRequests = entries.map((entry) => ({
       id: crypto.randomUUID(),
-      name: instanceEventName,
-      description: templateEvent.description,
+      batchId: crypto.randomUUID(),
       createdBySystemHeadId,
-      createdBySystemHeadName: systemHead?.name || "",
-      isOngoing: true,
-      type: "fixed",
-      templateEventId: templateEventId, 
-      instanceNumber: nextInstanceNumber,
-      createdAt: now,
-      updatedAt: now,
-    };
+      eventId,
+      type: "one_time",
+      rollNo: entry.rollNo,
+      bank,
+      banks,
+      amount: entry.amount,
+      status: "pending",
+      timeToLive: newTimeToLive.toISOString(),
+      createdAt: nowISO,
+      updatedAt: nowISO,
+    }));
 
-    await createEventRecord(instanceEvent);
-    console.log(`[Scheduler] Created instance event #${nextInstanceNumber} (${instanceEvent.id}) for template ${templateEventId}`);
+    await createOneTimePaymentRequestRecords(paymentRequests);
 
-    const fixedPaymentRequest = {
-      id: crypto.randomUUID(),
-      createdBySystemHeadId,
-      eventId: instanceEvent.id, 
-      type: "fixed",
-      bank: bank || banks?.[0] || null,
-      banks: banks || [],
-      isAmountFixed: true,
-      amount,
-      createdAt: now,
-      updatedAt: now,
-    };
+    const generatedPaymentIds = paymentRequests.map(p => p.id);
 
-    await createFixedPaymentRequestRecord(fixedPaymentRequest);
-    console.log(`[Scheduler] Created fixed payment request ${fixedPaymentRequest.id} for instance #${nextInstanceNumber}`);
+    const nextExecutionDate = calculateNextExecutionDate(now, intervalValue, intervalUnit).toISOString();
 
-    await updateRecurringEventInstanceCounter(templateEventId, nextInstanceNumber);
-
-    let updateFields = { lastExecutedAt: now };
-
-    if (recurringMode === "interval" && intervalValue && intervalUnit) {
-      const nextExecutionDate = calculateNextExecutionDate(
-        new Date(),
-        intervalValue,
-        intervalUnit
-      ).toISOString();
-      updateFields.nextExecutionDate = nextExecutionDate;
-    } else if (recurringMode === "date") {
-      updateFields.status = "inactive";
-    }
-
-    await updateRecurringPaymentRequestById(paymentRequestId, updateFields);
+    await updateRecurringTemplateById(templateId, {
+      nextExecutionDate,
+      lastGeneratedAt: nowISO,
+      lastGeneratedPaymentIds: generatedPaymentIds,
+    });
 
     console.log(
-      `[Scheduler] Updated recurring payment ${paymentRequestId}. Mode: ${recurringMode}, Next instance: #${nextInstanceNumber + 1}`
+      `[Scheduler] Generated ${paymentRequests.length} one-time payments for template ${templateId} ` +
+      `(Event: ${eventId}, Next execution: ${nextExecutionDate})`
     );
   } catch (error) {
-    console.error(
-      `[Scheduler] Error processing recurring payment ${paymentRequest?.id}:`,
-      error
-    );
+    console.error(`[Scheduler] Error processing template ${template?.id}:`, error);
   }
 }
 
+/**
+ * Retry pending hash verifications
+ */
 export async function retryPendingHashVerifications() {
   const pendingRecords = await listPendingHashVerificationRetries();
   if (!pendingRecords.length) {
@@ -186,17 +173,21 @@ export async function retryPendingHashVerifications() {
   }
 }
 
-export function startRecurringPaymentScheduler() {
+/**
+ * Start the recurring templates scheduler
+ * Runs daily at midnight (Asia/Kolkata)
+ */
+export function startRecurringTemplatesScheduler() {
   const task = cron.schedule('0 0 * * *', async () => {
     const now = new Date().toISOString();
-    console.log(`[Scheduler] Cron job triggered at ${now} - Starting recurring payment execution`);
-    await executeRecurringPayments();
+    console.log(`[Scheduler] Cron job triggered at ${now} - Starting recurring templates execution`);
+    await executeRecurringTemplates();
     await retryPendingHashVerifications();
   }, {
     scheduled: true,
     timezone: "Asia/Kolkata"
   });
 
-  console.log("[Scheduler] Recurring payment scheduler started (Cron: 0 0 * * * - Daily at midnight)");
+  console.log("[Scheduler] Recurring templates scheduler started (Cron: 0 0 * * * - Daily at midnight)");
   return task;
 }

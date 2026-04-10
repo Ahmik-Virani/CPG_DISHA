@@ -8,7 +8,6 @@ import { eventApi } from "../../lib/api";
 function formatPaymentType(type) {
   if (type === "one_time") return "One-Time";
   if (type === "fixed") return "Fixed";
-  if (type === "recurring") return "Recurring";
   return "Not Set";
 }
 
@@ -223,17 +222,6 @@ export default function ManageEvent() {
                     >
                       Fixed
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setPaymentTypeTab("recurring")}
-                      className={`px-3.5 py-1 rounded-full text-xs font-medium transition-all duration-200 ${
-                        paymentTypeTab === "recurring"
-                          ? "bg-orange-400 text-white shadow"
-                          : "text-gray-500 hover:text-gray-900"
-                      }`}
-                    >
-                      Recurring
-                    </button>
                   </div>
                 </div>
 
@@ -256,7 +244,7 @@ export default function ManageEvent() {
                   </div>
                 ) : (
                   <div className="border border-dashed border-gray-200 rounded-xl p-6 text-center">
-                    <p className="text-sm text-gray-400">No {paymentTypeTab === "one_time" ? "One-Time" : paymentTypeTab === "fixed" ? "Fixed" : "Recurring"} events active</p>
+                    <p className="text-sm text-gray-400">No {paymentTypeTab === "one_time" ? "One-Time" : paymentTypeTab === "fixed" ? "Fixed" : ""} events active</p>
                   </div>
                 )}
               </div>

@@ -7,9 +7,5 @@ export function formatPaymentType(type) {
     return "Fixed";
   }
 
-  if (type === "recurring") {
-    return "Recurring";
-  }
-
   return "Unknown";
 }

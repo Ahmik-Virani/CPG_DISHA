@@ -146,6 +146,7 @@ router.post("/", requireAuth, requireRole("system_head"), async (req, res) => {
   };
 
   await createEventRecord(event);
+  console.log(`[Event] Created event ${event.id} - Name: "${name}", SystemID: ${req.auth.sub}`);
 
   return res.status(201).json({ event });
 });
@@ -166,6 +167,13 @@ router.delete("/:eventId", requireAuth, requireRole("system_head"), async (req, 
   if (!result.deletedCount) {
     return res.status(404).json({ message: "Event not found" });
   }
+
+  // Log the deletion with associated resources
+  const deletedTemplateIds = result.deletedTemplateIds || [];
+  console.log(
+    `[Event] Deleted event ${req.params.eventId} - SystemID: ${req.auth.sub}, ` +
+    `DeletedTemplates: ${deletedTemplateIds.length}`
+  );
 
   return res.json({ message: "Event deleted successfully" });
 });

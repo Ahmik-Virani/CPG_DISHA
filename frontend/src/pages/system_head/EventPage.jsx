@@ -31,8 +31,7 @@ export default function EventPage() {
     amount: "",
     timeToLive: "",
     isAmountFixed: false,
-    recurringMode: "date",
-    nextExecutionDate: "",
+    isRecurring: false,
     intervalValue: "1",
     intervalUnit: "months",
   });
@@ -104,7 +103,6 @@ export default function EventPage() {
     if (!paymentRequest) return;
     
     const typeMessages = {
-      recurring: "Delete this recurring payment? No further recurring charges will be created.",
       fixed: "Delete this fixed payment request?",
       one_time: "Delete this one-time payment request?",
     };
@@ -115,9 +113,7 @@ export default function EventPage() {
     setIsActing(true);
     setError("");
     try {
-      if (paymentRequest.type === "recurring") {
-        await eventApi.deleteRecurringPaymentRequest(token, paymentRequest.id);
-      } else if (paymentRequest.type === "fixed") {
+      if (paymentRequest.type === "fixed") {
         await eventApi.deleteFixedPaymentRequest(token, paymentRequest.id);
       } else if (paymentRequest.type === "one_time") {
         await eventApi.deleteOneTimePaymentRequest(token, paymentRequest.id);
@@ -149,8 +145,7 @@ export default function EventPage() {
       amount: "",
       timeToLive: "",
       isAmountFixed: false,
-      recurringMode: "date",
-      nextExecutionDate: "",
+      isRecurring: false,
       intervalValue: "1",
       intervalUnit: "months",
     });
@@ -209,20 +204,16 @@ export default function EventPage() {
     setNextOneTimeRowId(maxRowKey + 1);
   };
 
-  const handleRecurringModeChange = (mode) => {
-    setPaymentForm((prev) => ({ ...prev, recurringMode: mode }));
-  };
-
-  const handleNextExecutionDateChange = (date) => {
-    setPaymentForm((prev) => ({ ...prev, nextExecutionDate: date }));
-  };
-
   const handleIntervalValueChange = (value) => {
     setPaymentForm((prev) => ({ ...prev, intervalValue: value }));
   };
 
   const handleIntervalUnitChange = (unit) => {
     setPaymentForm((prev) => ({ ...prev, intervalUnit: unit }));
+  };
+
+  const handleRecurringToggle = (checked) => {
+    setPaymentForm((prev) => ({ ...prev, isRecurring: checked }));
   };
 
   const handlePaymentFormCancel = () => {
@@ -251,38 +242,10 @@ export default function EventPage() {
       if (hasDuplicateRollNos) { setPaymentFeedback({ type: "error", message: "Duplicate roll numbers are not allowed." }); return; }
       payload.entries = entries;
       payload.timeToLive = ttlDate.toISOString();
-    }
 
-    if (paymentType === "fixed") {
-      payload.isAmountFixed = paymentForm.isAmountFixed;
-      if (paymentForm.isAmountFixed) {
-        const amount = Number(paymentForm.amount);
-        if (!Number.isFinite(amount) || amount <= 0) {
-          setPaymentFeedback({ type: "error", message: "Amount must be greater than 0 when fixed amount is enabled." });
-          return;
-        }
-        payload.amount = amount;
-      }
-    }
-
-    if (paymentType === "recurring") {
-      const amount = Number(paymentForm.amount);
-      if (!Number.isFinite(amount) || amount <= 0) {
-        setPaymentFeedback({ type: "error", message: "Amount must be greater than 0 for recurring payments." });
-        return;
-      }
-
-      payload.isAmountFixed = true;
-      payload.amount = amount;
-      payload.recurringMode = paymentForm.recurringMode;
-
-      if (paymentForm.recurringMode === "date") {
-        if (!paymentForm.nextExecutionDate) {
-          setPaymentFeedback({ type: "error", message: "Please select a next execution date." });
-          return;
-        }
-        payload.nextExecutionDate = paymentForm.nextExecutionDate;
-      } else if (paymentForm.recurringMode === "interval") {
+      // Handle recurring one-time payment
+      if (paymentForm.isRecurring) {
+        payload.isRecurring = true;
         const intervalValue = Number(paymentForm.intervalValue);
         if (!Number.isFinite(intervalValue) || intervalValue <= 0) {
           setPaymentFeedback({ type: "error", message: "Interval value must be greater than 0." });
@@ -294,6 +257,18 @@ export default function EventPage() {
         }
         payload.intervalValue = intervalValue;
         payload.intervalUnit = paymentForm.intervalUnit;
+      }
+    }
+
+    if (paymentType === "fixed") {
+      payload.isAmountFixed = paymentForm.isAmountFixed;
+      if (paymentForm.isAmountFixed) {
+        const amount = Number(paymentForm.amount);
+        if (!Number.isFinite(amount) || amount <= 0) {
+          setPaymentFeedback({ type: "error", message: "Amount must be greater than 0 when fixed amount is enabled." });
+          return;
+        }
+        payload.amount = amount;
       }
     }
 
@@ -435,9 +410,6 @@ export default function EventPage() {
                       >
                         Delete {formatPaymentType(paymentRequest.type)} Payment
                       </button>
-                      {paymentRequest.type === "recurring" && (
-                        <p className="text-xs text-gray-500 flex items-center">Stops future recurring charges</p>
-                      )}
                     </div>
                   )}
                 </div>
@@ -471,10 +443,9 @@ export default function EventPage() {
                     setPaymentForm((prev) => ({ ...prev, isAmountFixed: e.target.checked, amount: e.target.checked ? prev.amount : "" }))
                   }
                   onFixedAmountChange={(e) => setPaymentForm((prev) => ({ ...prev, amount: e.target.value }))}
-                  onRecurringModeChange={handleRecurringModeChange}
-                  onNextExecutionDateChange={handleNextExecutionDateChange}
-                  onIntervalValueChange={(value) => handleIntervalValueChange(value)}
-                  onIntervalUnitChange={(unit) => handleIntervalUnitChange(unit)}
+                  onRecurringToggle={handleRecurringToggle}
+                  onIntervalValueChange={handleIntervalValueChange}
+                  onIntervalUnitChange={handleIntervalUnitChange}
                   onCancel={handlePaymentFormCancel}
                 />
               )}
