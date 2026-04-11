@@ -1,0 +1,47 @@
+config:
+  target: "http://localhost:4000"
+  phases:
+    - duration: 30
+      arrivalRate: 10
+      name: "Warm up"
+    - duration: 60
+      arrivalRate: 50
+      name: "Ramp up"
+    - duration: 60
+      arrivalRate: 100
+      name: "Stress"
+    - duration: 30
+      arrivalRate: 10
+      name: "Cool down"
+  processor: "./load-test-processor.cjs"
+
+scenarios:
+  - name: "Health Check"
+    weight: 20
+    flow:
+      - get:
+          url: "/health"
+
+  - name: "User Payment Flow"
+    weight: 30
+    flow:
+      - get:
+          url: "/user-payments"
+          headers:
+            Authorization: "Bearer test-token"
+
+  - name: "Events Endpoint"
+    weight: 25
+    flow:
+      - get:
+          url: "/events"
+          headers:
+            Authorization: "Bearer test-token"
+
+  - name: "Admin Check"
+    weight: 25
+    flow:
+      - get:
+          url: "/admin"
+          headers:
+            Authorization: "Bearer admin-token"
