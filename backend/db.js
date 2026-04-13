@@ -277,7 +277,7 @@ export async function listOneTimePaymentRequestsByBatchId(batchId, systemHeadId)
 
 export async function listOneTimePaymentRequestsByRollNo(rollNo) {
   return getOneTimePaymentRequestsCollection()
-    .find({ rollNo })
+    .find({ rollNo, status: { $ne: "success" } })
     .sort({ createdAt: -1 })
     .toArray();
 }

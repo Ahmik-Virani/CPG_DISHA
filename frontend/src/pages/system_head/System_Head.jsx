@@ -12,7 +12,7 @@ function StatusBadge({ status }) {
     pending: "bg-yellow-100 text-yellow-700",
     failed: "bg-red-100 text-red-600",
   };
-  const label = status === "success" ? "paid" : (status || "unknown");
+  const label = status === "success" ? "Successful" : status === "paid" ? "Paid" : (status || "unknown");
   return (
     <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${styles[status] || "bg-gray-100 text-gray-500"}`}>
       {label}
