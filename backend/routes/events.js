@@ -12,6 +12,7 @@ import {
   getAllPaymentRequestTypesByEventIds,
   listPaymentRequestIdsBySystemHead,
   listPaymentProcessedByPaymentRequestIds,
+  listExternalPaymentProcessedBySystemHeadId,
   listPaymentRequestContextsByIds,
 } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -64,6 +65,23 @@ function buildSystemHeadHistory(records, requestContexts, events) {
   });
 }
 
+function buildExternalHistory(records) {
+  return records.map((record) => ({
+    id: record.id,
+    paymentRequestId: null,
+    eventId: null,
+    eventName: "External",
+    eventDescription: "External payment link",
+    type: "external",
+    status: resolveRecordStatus(record),
+    student: record.student || null,
+    transaction: record.transaction || null,
+    bank: record.bank || null,
+    createdAt: record.createdAt || null,
+    updatedAt: record.updatedAt || null,
+  }));
+}
+
 
 router.get("/banks/options", requireAuth, requireRole("system_head"), async (_req, res) => {
   const banks = await listBanks();
@@ -94,20 +112,26 @@ router.get("/", requireAuth, requireRole("system_head"), async (req, res) => {
 router.get("/transactions/history", requireAuth, requireRole("system_head"), async (req, res) => {
   const eventId = String(req.query?.eventId || "").trim();
   const paymentRequestIds = await listPaymentRequestIdsBySystemHead(req.auth.sub, eventId);
+  const includeExternal = !eventId;
 
-  if (!paymentRequestIds.length) {
+  const [externalRecords, records, requestContexts] = await Promise.all([
+    includeExternal ? listExternalPaymentProcessedBySystemHeadId(req.auth.sub) : Promise.resolve([]),
+    paymentRequestIds.length ? listPaymentProcessedByPaymentRequestIds(paymentRequestIds) : Promise.resolve([]),
+    paymentRequestIds.length ? listPaymentRequestContextsByIds(paymentRequestIds) : Promise.resolve([]),
+  ]);
+
+  if (!records.length && !externalRecords.length) {
     return res.json({ transactions: [] });
   }
 
-  const [records, requestContexts] = await Promise.all([
-    listPaymentProcessedByPaymentRequestIds(paymentRequestIds),
-    listPaymentRequestContextsByIds(paymentRequestIds),
-  ]);
-
   const eventIds = [...new Set(requestContexts.map((context) => String(context.eventId || "").trim()).filter(Boolean))];
   const events = await listEventsByIds(eventIds);
+  const history = [
+    ...buildSystemHeadHistory(records, requestContexts, events),
+    ...buildExternalHistory(externalRecords),
+  ].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 
-  return res.json({ transactions: buildSystemHeadHistory(records, requestContexts, events) });
+  return res.json({ transactions: history });
 });
 
 router.get("/:eventId", requireAuth, requireRole("system_head"), async (req, res) => {

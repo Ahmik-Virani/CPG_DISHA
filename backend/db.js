@@ -11,6 +11,7 @@ let oneTimePaymentRequestsCollection;
 let recurringTemplatesCollection;
 let banksCollection;
 let paymentProcessedCollection;
+let externalLinksCollection;
 let mongoReady = false;
 
 function resolveMongoUri() {
@@ -83,6 +84,15 @@ export function getPaymentProcessedCollection() {
   return paymentProcessedCollection;
 }
 
+export function getExternalLinksCollection() {
+  if (!externalLinksCollection) {
+    const error = new Error("MongoDB is not connected yet");
+    error.status = 503;
+    throw error;
+  }
+  return externalLinksCollection;
+}
+
 export function isMongoReady() {
   return mongoReady;
 }
@@ -145,6 +155,38 @@ export async function findPaymentProcessedById(paymentRecordId) {
   return getPaymentProcessedCollection().findOne({ id: paymentRecordId });
 }
 
+export async function findExternalPaymentProcessedByMerchantTxnNo(merchantTxnNo) {
+  const normalized = String(merchantTxnNo || "").trim();
+  if (!normalized) {
+    return null;
+  }
+
+  return getPaymentProcessedCollection()
+    .find({
+      source: "external_link",
+      "transaction.transaction_id": normalized,
+    })
+    .sort({ createdAt: -1 })
+    .limit(1)
+    .next();
+}
+
+export async function findExternalPaymentProcessedByTranCtx(tranCtx) {
+  const normalized = String(tranCtx || "").trim();
+  if (!normalized) {
+    return null;
+  }
+
+  return getPaymentProcessedCollection()
+    .find({
+      source: "external_link",
+      "gateway.tranCtx": normalized,
+    })
+    .sort({ createdAt: -1 })
+    .limit(1)
+    .next();
+}
+
 export async function updatePaymentProcessedById(paymentRecordId, updateFields) {
   const update = {
     ...updateFields,
@@ -193,6 +235,95 @@ export async function listPaymentProcessedByPaymentRequestIds(paymentRequestIds)
     .find({ paymentRequestId: { $in: ids } })
     .sort({ createdAt: -1 })
     .toArray();
+}
+
+export async function listExternalPaymentProcessedBySystemHeadId(systemHeadId) {
+  return getPaymentProcessedCollection()
+    .find({
+      createdBySystemHeadId: systemHeadId,
+      source: "external_link",
+    })
+    .sort({ createdAt: -1 })
+    .toArray();
+}
+
+export async function findExternalLinkBySystemHeadId(systemHeadId) {
+  return getExternalLinksCollection().findOne({ createdBySystemHeadId: systemHeadId });
+}
+
+export async function findExternalLinkById(linkId) {
+  return getExternalLinksCollection().findOne({ id: linkId });
+}
+
+export async function createExternalLinkRecord(link) {
+  await getExternalLinksCollection().insertOne(link);
+  return link;
+}
+
+export async function createOrGetExternalLinkForSystemHead(systemHeadId) {
+  const existing = await findExternalLinkBySystemHeadId(systemHeadId);
+  if (existing) {
+    return existing;
+  }
+
+  const now = new Date().toISOString();
+  const link = {
+    id: crypto.randomUUID(),
+    createdBySystemHeadId: systemHeadId,
+    status: "active",
+    usageCount: 0,
+    lastUsedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await createExternalLinkRecord(link);
+  return link;
+}
+
+export async function updateExternalLinkById(linkId, updateFields) {
+  const update = {
+    ...updateFields,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const result = await getExternalLinksCollection().findOneAndUpdate(
+    { id: linkId },
+    { $set: update },
+    {
+      returnDocument: "after",
+      projection: { _id: 0 },
+    }
+  );
+
+  if (!result) {
+    return null;
+  }
+
+  return result.value || result;
+}
+
+export async function bumpExternalLinkUsage(linkId) {
+  const result = await getExternalLinksCollection().findOneAndUpdate(
+    { id: linkId },
+    {
+      $inc: { usageCount: 1 },
+      $set: {
+        lastUsedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    },
+    {
+      returnDocument: "after",
+      projection: { _id: 0 },
+    }
+  );
+
+  if (!result) {
+    return null;
+  }
+
+  return result.value || result;
 }
 
 export async function listPaymentRequestContextsByIds(paymentRequestIds) {
@@ -614,6 +745,7 @@ async function connectMongo() {
   recurringTemplatesCollection = db.collection("Recurring_Templates");
   banksCollection = db.collection("Banks");
   paymentProcessedCollection = db.collection("Payment_Processed");
+  externalLinksCollection = db.collection("External_Links");
   mongoReady = true;
 
   await usersCollection.createIndex({ id: 1 }, { unique: true });
@@ -634,9 +766,13 @@ async function connectMongo() {
   await banksCollection.createIndex({ normalizedDisplayName: 1 }, { unique: true });
   await paymentProcessedCollection.createIndex({ id: 1 }, { unique: true });
   await paymentProcessedCollection.createIndex({ paymentRequestId: 1 });
+  await paymentProcessedCollection.createIndex({ createdBySystemHeadId: 1, source: 1 });
   await paymentProcessedCollection.createIndex({ "student.userId": 1 });
   await paymentProcessedCollection.createIndex({ createdAt: -1 });
   await paymentProcessedCollection.createIndex({ status: 1, pendingHashVerificationRetry: 1 }, { sparse: true });
+  await externalLinksCollection.createIndex({ id: 1 }, { unique: true });
+  await externalLinksCollection.createIndex({ createdBySystemHeadId: 1 }, { unique: true });
+  await externalLinksCollection.createIndex({ status: 1 });
 }
 
 export async function bootstrapAdmin() {
@@ -677,6 +813,7 @@ export async function connectMongoWithRetry(attempt = 1) {
     recurringTemplatesCollection = undefined;
     banksCollection = undefined;
     paymentProcessedCollection = undefined;
+    externalLinksCollection = undefined;
     const delayMs = Math.min(30000, attempt * 3000);
     console.error(
       "MongoDB connect failed (attempt " + attempt + "). Retrying in " + Math.round(delayMs / 1000) + "s",

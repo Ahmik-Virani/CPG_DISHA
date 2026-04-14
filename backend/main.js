@@ -17,6 +17,7 @@ import deletePaymentRoutes from "./routes/delete-payment-request.js";
 import healthRoutes from "./routes/health.js";
 import adminRoutes from "./routes/admin.js";
 import userPaymentRoutes from "./routes/user-payments.js";
+import externalLinksRoutes from "./routes/external-links.js";
 
 const app = express();
 
@@ -30,6 +31,7 @@ app.use("/events", paymentRoutes);
 app.use("/events", deletePaymentRoutes);
 app.use("/admin", adminRoutes);
 app.use("/user-payments", userPaymentRoutes);
+app.use("/external-links", externalLinksRoutes);
 
 app.use((error, _req, res, _next) => {
   console.error(error);
