@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CalendarPlus, ArrowUpRight, History, PlusCircle, CreditCard } from "lucide-react";
+import { CalendarPlus, ArrowUpRight, History, PlusCircle, CreditCard, Link2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import Header from "../../components/Header";
@@ -100,6 +100,12 @@ export default function ManageEvent() {
             className="flex items-center gap-2 px-5 py-2 rounded-full text-sm font-medium text-gray-500 hover:text-gray-900 transition-all duration-200"
           >
             <History size={15} /> Settlement History
+          </button>
+          <button
+            onClick={() => navigate("/system_head?tab=external-api")}
+            className="flex items-center gap-2 px-5 py-2 rounded-full text-sm font-medium text-gray-500 hover:text-gray-900 transition-all duration-200"
+          >
+            <Link2 size={15} /> External API
           </button>
         </div>
       </div>

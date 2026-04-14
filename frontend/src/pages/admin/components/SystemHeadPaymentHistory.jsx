@@ -21,6 +21,14 @@ function StatusBadge({ status }) {
 }
 
 function TypeBadge({ type }) {
+  if (type === "external") {
+    return (
+      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700">
+        External
+      </span>
+    );
+  }
+
   return (
     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${type === "fixed" ? "bg-blue-50 text-blue-600" : "bg-purple-50 text-purple-600"}`}>
       {type === "fixed" ? "Fixed" : "One-Time"}
@@ -182,7 +190,9 @@ export default function SystemHeadPaymentHistory() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-gray-900 truncate">{txn.eventName}</p>
                       <p className="text-xs text-gray-400 mt-0.5">
-                        {txn.student?.name || "—"} &middot; {txn.student?.roll_no || "—"}
+                        {txn.type === "external"
+                          ? `External · ${txn.student?.email || "—"}`
+                          : `${txn.student?.name || "—"} · ${txn.student?.roll_no || "—"}`}
                       </p>
                     </div>
                     <div className="flex items-center gap-3 shrink-0 flex-wrap justify-end">

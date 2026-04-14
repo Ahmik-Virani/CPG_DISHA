@@ -5,6 +5,8 @@ import Admin from "./pages/admin/Admin";
 import SystemHeadPaymentHistory from "./pages/admin/components/SystemHeadPaymentHistory";
 import User from "./pages/user/User";
 import PaymentDetails from "./pages/user/PaymentDetails";
+import ExternalPaymentLanding from "./pages/user/ExternalPaymentLanding";
+import ExternalReceipt from "./pages/user/ExternalReceipt";
 import Receipt from "./pages/user/Receipt";
 import SystemHead from "./pages/system_head/System_Head";
 import ManageEvent from "./pages/system_head/ManageEvent";
@@ -68,6 +70,9 @@ function App() {
           </ProtectedRoute>
         }
       />
+
+      <Route path="/pay/external/:linkId" element={<ExternalPaymentLanding />} />
+      <Route path="/pay/external/receipt/:paymentRecordId" element={<ExternalReceipt />} />
 
       <Route
         path="/user/receipt/:paymentId"

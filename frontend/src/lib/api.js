@@ -97,3 +97,25 @@ export const userPaymentApi = {
   verifyStatus: (token, data) =>
     apiRequest("/user-payments/verify-status", { method: "POST", body: JSON.stringify(data) }, token),
 };
+
+export const externalLinkApi = {
+  ensureMyLink: (token) => apiRequest("/external-links/me", { method: "POST" }, token),
+  createPaymentUrl: (token, data) =>
+    apiRequest("/external-links/me/payment-url", { method: "POST", body: JSON.stringify(data) }, token),
+  updateMyLinkStatus: (token, linkId, status) =>
+    apiRequest(`/external-links/${linkId}/status`, { method: "PATCH", body: JSON.stringify({ status }) }, token),
+  resolvePublicLink: (linkId, amount) =>
+    apiRequest(
+      `/external-links/${encodeURIComponent(linkId)}/resolve?amount=${encodeURIComponent(amount)}`,
+      { method: "GET" }
+    ),
+  initiatePublicPayment: (linkId, data) =>
+    apiRequest(`/external-links/${encodeURIComponent(linkId)}/initiate`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  getPublicReceipt: (paymentRecordId) =>
+    apiRequest(`/external-links/receipt/${encodeURIComponent(paymentRecordId)}`, { method: "GET" }),
+  verifyPublicPaymentStatus: (data) =>
+    apiRequest("/external-links/verify-status", { method: "POST", body: JSON.stringify(data) }),
+};
