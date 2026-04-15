@@ -19,3 +19,6 @@ export const ICICI_HMAC_ALGO = String(process.env.ICICI_HMAC_ALGO).trim();
 export const ICICI_INITIATE_SALE_URL = String(process.env.ICICI_INITIATE_SALE_URL).trim();
 export const ICICI_STATUS_CHECK_URL = String(process.env.ICICI_STATUS_CHECK_URL).trim();
 export const ICICI_AUTH_REDIRECT_URL = String(process.env.ICICI_AUTH_REDIRECT_URL).trim();
+export const ICICI_REFUND_URL = String(process.env.ICICI_REFUND_URL).trim();
+
+export const ICICI_SETTLEMENT_URL = String(process.env.ICICI_SETTLEMENT_URL || process.env.ICICI_REFUND_URL || "").trim();

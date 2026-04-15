@@ -42,6 +42,8 @@ export default function Admin() {
   const [nextBankPairId, setNextBankPairId] = useState(2);
   const [isSubmittingBank, setIsSubmittingBank] = useState(false);
   const [isDeletingBank, setIsDeletingBank] = useState(false);
+  const [settlementSummary, setSettlementSummary] = useState({ latest: null, records: [] });
+  const [isLoadingSettlement, setIsLoadingSettlement] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
@@ -53,18 +55,22 @@ export default function Admin() {
           setIsLoading(false);
           setBanks([]);
           setIsLoadingBanks(false);
+          setSettlementSummary({ latest: null, records: [] });
+          setIsLoadingSettlement(false);
         }
         return;
       }
 
       try {
-        const [headsData, banksData] = await Promise.all([
+        const [headsData, banksData, settlementData] = await Promise.all([
           adminApi.listSystemHeads(token),
           adminApi.listBanks(token),
+          adminApi.getIciciSettlementHistory(token, 30),
         ]);
         if (isMounted) {
           setSystemHeads(Array.isArray(headsData.users) ? headsData.users : []);
           setBanks(Array.isArray(banksData.banks) ? banksData.banks : []);
+          setSettlementSummary(settlementData || { latest: null, records: [] });
         }
       } catch (err) {
         if (isMounted) {
@@ -75,6 +81,7 @@ export default function Admin() {
         if (isMounted) {
           setIsLoading(false);
           setIsLoadingBanks(false);
+          setIsLoadingSettlement(false);
         }
       }
     }
@@ -353,6 +360,8 @@ export default function Admin() {
             onOpenAddBank={handleOpenAddBank}
             onOpenEditBank={handleOpenEditBank}
             onToggleBankStatus={handleToggleBankStatus}
+            settlementSummary={settlementSummary}
+            settlementLoading={isLoadingSettlement}
           />
         )}
       </div>

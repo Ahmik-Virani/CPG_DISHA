@@ -18,6 +18,7 @@ import {
 } from "../db.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { normalizeEmail } from "../utils.js";
+import { getIciciSettlementHistory, syncIciciSettlementHistoryForDate } from "../settlement.js";
 
 const router = Router();
 
@@ -358,6 +359,22 @@ router.get("/system-heads/:systemHeadId/payment-history", requireAuth, requireRo
   ].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 
   return res.json({ transactions: history });
+});
+
+router.get("/settlements/icici", requireAuth, requireRole("admin"), async (req, res) => {
+  const limit = Number(req.query?.limit || 30);
+  const data = await getIciciSettlementHistory(limit);
+  return res.json(data);
+});
+
+router.post("/settlements/icici/sync", requireAuth, requireRole("admin"), async (req, res) => {
+  const settlementDate = String(req.body?.settlementDate || "").trim();
+  if (!/^\d{8}$/.test(settlementDate)) {
+    return res.status(400).json({ message: "settlementDate is required in YYYYMMDD format" });
+  }
+
+  const result = await syncIciciSettlementHistoryForDate(settlementDate);
+  return res.json(result);
 });
 
 export default router;

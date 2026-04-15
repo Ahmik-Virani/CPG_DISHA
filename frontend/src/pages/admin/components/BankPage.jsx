@@ -1,5 +1,19 @@
 import { Plus, Edit3, Power, Building2 } from "lucide-react";
 
+function formatInr(amount) {
+  const value = Number(amount);
+  if (!Number.isFinite(value)) {
+    return "INR 0.00";
+  }
+
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
 export default function BankPage({
   banks,
   isLoading,
@@ -7,6 +21,8 @@ export default function BankPage({
   onOpenAddBank,
   onOpenEditBank,
   onToggleBankStatus,
+  settlementSummary,
+  settlementLoading,
 }) {
   return (
     <>
@@ -25,6 +41,38 @@ export default function BankPage({
       </div>
 
       {error ? <p className="mb-4 text-sm text-red-600">{error}</p> : null}
+
+      <div className="mb-6 rounded-2xl border border-orange-200 bg-white/90 p-5 shadow-sm">
+        <div className="flex flex-col gap-1">
+          <p className="text-xs font-semibold uppercase tracking-wide text-orange-600">ICICI Settlement</p>
+          <h3 className="text-xl font-semibold text-gray-900">Previous-Day Settled Total</h3>
+        </div>
+
+        {settlementLoading ? (
+          <p className="mt-3 text-sm text-gray-500">Loading settlement history...</p>
+        ) : settlementSummary?.latest ? (
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-4">
+            <div>
+              <p className="text-xs text-gray-500">Settlement Date</p>
+              <p className="text-sm font-semibold text-gray-900">{settlementSummary.latest.settlementDate || "-"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Total Settled</p>
+              <p className="text-sm font-semibold text-gray-900">{formatInr(settlementSummary.latest.totalSettledAmount)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Settled Transactions</p>
+              <p className="text-sm font-semibold text-gray-900">{Number(settlementSummary.latest.transactionCount || 0)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Sync Source</p>
+              <p className="text-sm font-semibold uppercase text-gray-900">{settlementSummary.latest.source || "-"}</p>
+            </div>
+          </div>
+        ) : (
+          <p className="mt-3 text-sm text-gray-500">No settlement history found yet for ICICI.</p>
+        )}
+      </div>
 
       {isLoading ? (
         <div className="text-center text-gray-500">Loading banks...</div>

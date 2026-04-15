@@ -12,6 +12,8 @@ let recurringTemplatesCollection;
 let banksCollection;
 let paymentProcessedCollection;
 let externalLinksCollection;
+let refundsCollection;
+let settlementHistoryCollection;
 let mongoReady = false;
 
 function resolveMongoUri() {
@@ -93,6 +95,24 @@ export function getExternalLinksCollection() {
   return externalLinksCollection;
 }
 
+export function getRefundsCollection() {
+  if (!refundsCollection) {
+    const error = new Error("MongoDB is not connected yet");
+    error.status = 503;
+    throw error;
+  }
+  return refundsCollection;
+}
+
+export function getSettlementHistoryCollection() {
+  if (!settlementHistoryCollection) {
+    const error = new Error("MongoDB is not connected yet");
+    error.status = 503;
+    throw error;
+  }
+  return settlementHistoryCollection;
+}
+
 export function isMongoReady() {
   return mongoReady;
 }
@@ -153,6 +173,90 @@ export async function createPaymentProcessedRecord(paymentRecord) {
 
 export async function findPaymentProcessedById(paymentRecordId) {
   return getPaymentProcessedCollection().findOne({ id: paymentRecordId });
+}
+
+export async function findRefundByPaymentRecordId(paymentRecordId) {
+  return getRefundsCollection()
+    .find({ paymentRecordId })
+    .sort({ createdAt: -1 })
+    .limit(1)
+    .next();
+}
+
+export async function createRefundRecord(refundRecord) {
+  await getRefundsCollection().insertOne(refundRecord);
+  return refundRecord;
+}
+
+export async function updateRefundRecordById(refundId, updateFields) {
+  const update = {
+    ...updateFields,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const result = await getRefundsCollection().findOneAndUpdate(
+    { id: refundId },
+    { $set: update },
+    {
+      returnDocument: "after",
+      projection: { _id: 0 },
+    }
+  );
+
+  if (!result) {
+    return null;
+  }
+
+  return result.value || result;
+}
+
+export async function upsertSettlementHistoryRecord({ bankName, settlementDate, updateFields }) {
+  const result = await getSettlementHistoryCollection().findOneAndUpdate(
+    { bankName, settlementDate },
+    {
+      $set: {
+        ...updateFields,
+        bankName,
+        settlementDate,
+        updatedAt: new Date().toISOString(),
+      },
+      $setOnInsert: {
+        id: crypto.randomUUID(),
+        createdAt: new Date().toISOString(),
+      },
+    },
+    {
+      upsert: true,
+      returnDocument: "after",
+      projection: { _id: 0 },
+    }
+  );
+
+  return result?.value || result || null;
+}
+
+export async function listSettlementHistoryByBank(bankName, limit = 30) {
+  const normalizedBank = String(bankName || "").trim().toUpperCase();
+  if (!normalizedBank) {
+    return [];
+  }
+
+  return getSettlementHistoryCollection()
+    .find({ bankName: normalizedBank })
+    .sort({ settlementDate: -1, updatedAt: -1 })
+    .limit(Math.max(1, Math.min(200, Number(limit) || 30)))
+    .toArray();
+}
+
+export async function listSuccessfulIciciTransactionsBetween(startISO, endISO) {
+  return getPaymentProcessedCollection()
+    .find({
+      status: "success",
+      "bank.bank_name": { $regex: /^icici$/i },
+      createdAt: { $gte: startISO, $lt: endISO },
+    })
+    .sort({ createdAt: 1 })
+    .toArray();
 }
 
 export async function findExternalPaymentProcessedByMerchantTxnNo(merchantTxnNo) {
@@ -219,6 +323,15 @@ export async function listPaymentProcessedByUserId(userId) {
 export async function listPendingHashVerificationRetries() {
   return getPaymentProcessedCollection()
     .find({ status: "pending", pendingHashVerificationRetry: true })
+    .toArray();
+}
+
+export async function listPaymentProcessedForReconciliation() {
+  return getPaymentProcessedCollection()
+    .find({
+      status: { $in: ["pending", "failed"] },
+      source: { $ne: "external_link" },
+    })
     .toArray();
 }
 
@@ -378,6 +491,24 @@ export async function updatePaymentRequestStatusById(paymentRequestId, status) {
   const oneTime = oneTimeResult?.value || oneTimeResult || null;
   const fixed = fixedResult?.value || fixedResult || null;
   return oneTime || fixed || null;
+}
+
+export async function listPaymentRequestIdsByEventId(eventId) {
+  const normalizedEventId = String(eventId || "").trim();
+  if (!normalizedEventId) {
+    return [];
+  }
+
+  const [fixedIds, oneTimeIds] = await Promise.all([
+    getFixedPaymentRequestsCollection()
+      .find({ eventId: normalizedEventId }, { projection: { _id: 0, id: 1 } })
+      .toArray(),
+    getOneTimePaymentRequestsCollection()
+      .find({ eventId: normalizedEventId }, { projection: { _id: 0, id: 1 } })
+      .toArray(),
+  ]);
+
+  return [...new Set([...fixedIds, ...oneTimeIds].map((row) => String(row.id || "").trim()).filter(Boolean))];
 }
 
 export async function listPaymentRequestIdsBySystemHead(systemHeadId, eventId) {
@@ -746,6 +877,8 @@ async function connectMongo() {
   banksCollection = db.collection("Banks");
   paymentProcessedCollection = db.collection("Payment_Processed");
   externalLinksCollection = db.collection("External_Links");
+  refundsCollection = db.collection("Refunds");
+  settlementHistoryCollection = db.collection("Settlement_History");
   mongoReady = true;
 
   await usersCollection.createIndex({ id: 1 }, { unique: true });
@@ -773,6 +906,13 @@ async function connectMongo() {
   await externalLinksCollection.createIndex({ id: 1 }, { unique: true });
   await externalLinksCollection.createIndex({ createdBySystemHeadId: 1 }, { unique: true });
   await externalLinksCollection.createIndex({ status: 1 });
+  await refundsCollection.createIndex({ id: 1 }, { unique: true });
+  await refundsCollection.createIndex({ paymentRecordId: 1 });
+  await refundsCollection.createIndex({ originalTxnNo: 1 });
+  await refundsCollection.createIndex({ status: 1, createdAt: -1 });
+  await settlementHistoryCollection.createIndex({ id: 1 }, { unique: true });
+  await settlementHistoryCollection.createIndex({ bankName: 1, settlementDate: 1 }, { unique: true });
+  await settlementHistoryCollection.createIndex({ settlementDate: -1, updatedAt: -1 });
 }
 
 export async function bootstrapAdmin() {
@@ -814,6 +954,8 @@ export async function connectMongoWithRetry(attempt = 1) {
     banksCollection = undefined;
     paymentProcessedCollection = undefined;
     externalLinksCollection = undefined;
+    refundsCollection = undefined;
+    settlementHistoryCollection = undefined;
     const delayMs = Math.min(30000, attempt * 3000);
     console.error(
       "MongoDB connect failed (attempt " + attempt + "). Retrying in " + Math.round(delayMs / 1000) + "s",

@@ -61,6 +61,8 @@ export const adminApi = {
       token
     ),
   deleteBank: (token, bankId) => apiRequest("/admin/banks/" + bankId, { method: "DELETE" }, token),
+  getIciciSettlementHistory: (token, limit = 30) =>
+    apiRequest(`/admin/settlements/icici?limit=${encodeURIComponent(limit)}`, { method: "GET" }, token),
 };
 
 export const eventApi = {

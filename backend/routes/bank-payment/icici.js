@@ -6,6 +6,7 @@ import {
   ICICI_INITIATE_SALE_URL,
   ICICI_AUTH_REDIRECT_URL,
   ICICI_STATUS_CHECK_URL,
+  ICICI_REFUND_URL,
 } from "../../config.js";
 
 function buildHttpError(status, message, details = {}) {
@@ -141,7 +142,7 @@ function findTxnRespDescription(payload) {
     return "";
   }
 
-  const keys = ["txnRespDescription", "txnResponseDescription", "responseDescription"];
+  const keys = ["txnRespDescription", "txnResponseDescription", "responseDescription", "respDescription"];
   for (const key of keys) {
     const value = payload[key];
     if (typeof value === "string" && value.trim()) {
@@ -152,6 +153,31 @@ function findTxnRespDescription(payload) {
   for (const value of Object.values(payload)) {
     if (value && typeof value === "object") {
       const nested = findTxnRespDescription(value);
+      if (nested) {
+        return nested;
+      }
+    }
+  }
+
+  return "";
+}
+
+function findResponseCode(payload) {
+  if (!payload || typeof payload !== "object") {
+    return "";
+  }
+
+  const keys = ["responseCode", "response_code", "respCode", "statusCode"];
+  for (const key of keys) {
+    const value = payload[key];
+    if (value !== undefined && value !== null && String(value).trim()) {
+      return String(value).trim();
+    }
+  }
+
+  for (const value of Object.values(payload)) {
+    if (value && typeof value === "object") {
+      const nested = findResponseCode(value);
       if (nested) {
         return nested;
       }
@@ -273,7 +299,6 @@ export async function checkIciciSaleStatus({
   const { merchantId, aggregatorID } = await getIciciMerchantConfig();
 
   const normalizedMerchantTxnNo = String(merchantTxnNo || "").trim();
-  const resolvedOriginalTxnNo = String(originalTxnNo || "").trim() || normalizedMerchantTxnNo;
 
   const packetWithoutHash = {
     merchantId,
@@ -346,6 +371,101 @@ export async function checkIciciSaleStatus({
     txnRespDescription,
     requestPacket,
     responsePacket,
+  };
+}
+
+export async function initiateIciciRefund({
+  originalTxnNo,
+  amount,
+  addlParam1,
+  addlParam2,
+}) {
+  if (!ICICI_HMAC_SECRET) {
+    throw buildHttpError(500, "ICICI_HMAC_SECRET is not configured");
+  }
+
+  if (!ICICI_REFUND_URL) {
+    throw buildHttpError(500, "ICICI_REFUND_URL is not configured");
+  }
+
+  const normalizedOriginalTxnNo = String(originalTxnNo || "").trim();
+  if (!normalizedOriginalTxnNo) {
+    throw buildHttpError(400, "originalTxnNo is required for refund");
+  }
+
+  const amountNumber = Number(amount);
+  if (!Number.isFinite(amountNumber) || amountNumber <= 0) {
+    throw buildHttpError(400, "A valid positive amount is required for refund");
+  }
+
+  const { merchantId, aggregatorID } = await getIciciMerchantConfig();
+  const merchantTxnNo = generateMerchantTxnNo();
+
+  const packetWithoutHash = {
+    merchantID: merchantId,
+    aggregatorID,
+    merchantTxnNo,
+    originalTxnNo: normalizedOriginalTxnNo,
+    amount: Number(amountNumber.toFixed(2)).toFixed(2),
+    transactionType: "REFUND",
+    addlParam1: String(addlParam1 || "").slice(0, 64),
+    addlParam2: String(addlParam2 || "").slice(0, 64),
+  };
+
+  const secureHash = buildSecureHashFromSortedValues(packetWithoutHash);
+  const requestPacket = {
+    ...packetWithoutHash,
+    secureHash,
+  };
+
+  const body = new URLSearchParams();
+  Object.entries(requestPacket).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      body.append(key, String(value));
+    }
+  });
+
+  console.log("[ICICI refund] requestPacket:\n" + JSON.stringify(requestPacket, null, 2));
+
+  const refundResponse = await fetch(ICICI_REFUND_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Accept: "application/json, text/plain, */*",
+    },
+    body: body.toString(),
+  });
+
+  const rawResponse = await refundResponse.text();
+  let responsePacket = {};
+  try {
+    responsePacket = rawResponse ? JSON.parse(rawResponse) : {};
+  } catch {
+    responsePacket = Object.fromEntries(new URLSearchParams(rawResponse));
+  }
+
+  console.log("[ICICI refund] responsePacket:\n" + JSON.stringify(responsePacket, null, 2));
+
+  if (!refundResponse.ok) {
+    throw buildHttpError(502, "Failed to process refund with ICICI", {
+      upstreamStatus: refundResponse.status,
+      responsePacket,
+    });
+  }
+
+  const responseCode = findResponseCode(responsePacket);
+  const respDescription = findTxnRespDescription(responsePacket) || "";
+  const hashVerified = verifyResponseSecureHash(responsePacket);
+  const isSuccess = responseCode === "000";
+
+  return {
+    status: isSuccess ? "success" : "failed",
+    responseCode,
+    respDescription,
+    hashVerified,
+    requestPacket,
+    responsePacket,
+    merchantTxnNo,
   };
 }
 
