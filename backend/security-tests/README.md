@@ -30,7 +30,42 @@ Optionally override defaults:
 - `SEC_TEST_USER_EMAIL` - user login email
 - `SEC_TEST_USER_PASSWORD` - user password
 
-# Load Testing Overview
+# Transaction Securities - Taken care of:
+
+* create/login user
+* create/login system head
+* verify system head profile
+* verify user profile
+* health endpoint is reachable
+* invalid login is rejected
+* missing token is rejected
+* invalid token is rejected
+* user role is forbidden from system head route
+* fetch bank options
+* create test events
+* reject unsupported payment request type
+* reject invalid one-time payment request
+* create one-time payment request
+* pending payments include one-time request
+* create fixed payment request
+* create recurring payment request: System head should create recurring payment request
+* verify-status rejects missing payment ids
+* verify-status rejects missing payment record
+* system head cannot verify user payment
+* initiate sale rejects unknown bank
+* initiate sale requires returnURL
+* initiate sale creates pending payment
+* pending payments still include initiated payment
+* verify-status returns valid status: Pending payments should no longer show successful/failed transactions
+* other user cannot verify someone else's payment
+* system head event details endpoint returns expected event
+* latest payment request is one-time
+* system head transaction history returns array
+* different system head cannot delete other's payment request
+* optional payments endpoint returns requests array
+
+
+# Load Testing 
 
 This configuration defines a staged load test for a backend service running at `http://localhost:4000`. The goal is to evaluate availability, scalability, and behavior under varying traffic conditions using a mix of public, user, and admin endpoints.
 
@@ -117,40 +152,6 @@ This creates a mixed workload combining:
 
 ---
 
-## Backend Preparation and Execution
-
-The load test is supported by a processor script that prepares the system before traffic is applied.
-
-### Setup Steps
-
-- Creates or logs in:
-  - System head (admin)
-  - User account  
-- Generates authentication tokens  
-- Creates a test event  
-- Fetches available bank options  
-- Creates a one-time payment request  
-
----
-
-## Execution Model
-
-- Concurrent workers simulate multiple users  
-- Requests are randomly selected based on scenario weights  
-- Execution continues until:
-  - Total request limit is reached, or  
-  - Time duration expires  
-
-### Metrics Collected
-
-- Total requests  
-- Successful responses (2xx)  
-- Failed responses  
-- HTTP status distribution  
-- Network errors (with abort threshold)  
-
----
-
 ## What This Test Covers
 
 | Area                          | Coverage |
@@ -164,22 +165,5 @@ The load test is supported by a processor script that prepares the system before
 
 ---
 
-## Limitations
-
-- No write-heavy operations during main load (only in setup phase)  
-- Static tokens in YAML (less realistic than dynamic auth)  
-- No latency percentiles or detailed timing breakdown  
-- Limited failure scenario injection  
-
----
-
-## Summary
-
-This load test simulates a realistic mix of traffic across public, user, and admin endpoints under increasing load. It is designed to expose:
-
-- Performance bottlenecks  
-- Authentication overhead  
-- Role-based access behavior  
-- System stability under stress  
 
 The staged phases combined with weighted scenarios provide a controlled yet representative evaluation of backend performance.
