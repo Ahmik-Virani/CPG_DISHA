@@ -122,6 +122,153 @@ async function resolvePayableRequestForUser(paymentRequestId, user) {
   return fixedRequest || null;
 }
 
+export function createInitiateUserPaymentSaleHandler({
+  findUserById: findUserByIdOverride = findUserById,
+  findOneTimePaymentRequestById: findOneTimePaymentRequestByIdOverride = findOneTimePaymentRequestById,
+  findFixedPaymentRequestById: findFixedPaymentRequestByIdOverride = findFixedPaymentRequestById,
+  findBankByDisplayName: findBankByDisplayNameOverride = findBankByDisplayName,
+  createPaymentProcessedRecord: createPaymentProcessedRecordOverride = createPaymentProcessedRecord,
+  initiateIciciSale: initiateIciciSaleOverride = initiateIciciSale,
+} = {}) {
+  async function resolvePayableRequestForUserOverride(paymentRequestId, user) {
+    const oneTimeRequest = await findOneTimePaymentRequestByIdOverride(paymentRequestId);
+    if (oneTimeRequest) {
+      const userRollNo = normalizeRollNo(user.roll_no);
+      if (!userRollNo || normalizeRollNo(oneTimeRequest.rollNo) !== userRollNo) {
+        return null;
+      }
+      return oneTimeRequest;
+    }
+
+    const fixedRequest = await findFixedPaymentRequestByIdOverride(paymentRequestId);
+    return fixedRequest || null;
+  }
+
+  return async (req, res) => {
+    const paymentRequestId = String(req.body?.paymentRequestId || "").trim();
+    const returnURL = String(req.body?.returnURL || "").trim();
+    const selectedBankInput = String(req.body?.bank || "").trim();
+    const customAmount = req.body?.customAmount;
+
+    if (!paymentRequestId) {
+      return res.status(400).json({ message: "paymentRequestId is required" });
+    }
+
+    if (!returnURL) {
+      return res.status(400).json({ message: "returnURL is required" });
+    }
+
+    const user = await findUserByIdOverride(req.auth.sub);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const paymentRequest = await resolvePayableRequestForUserOverride(paymentRequestId, user);
+    if (!paymentRequest) {
+      return res.status(404).json({ message: "Payment request not found" });
+    }
+
+    const enabledBanks = getEnabledBanks(paymentRequest);
+    if (!enabledBanks.length) {
+      return res.status(400).json({ message: "No banks are enabled for this payment request" });
+    }
+
+    const selectedBank = selectedBankInput || enabledBanks[0];
+    const selectedBankMatch = enabledBanks.find(
+      (bank) => bank.toLowerCase() === selectedBank.toLowerCase()
+    );
+    if (!selectedBankMatch) {
+      return res.status(400).json({ message: "Selected bank is not enabled for this payment request" });
+    }
+
+    const selectedBankDoc = await findBankByDisplayNameOverride(selectedBankMatch);
+    const isEnabled = typeof selectedBankDoc?.enabled === "boolean" ? selectedBankDoc.enabled : true;
+
+    if (!isEnabled) {
+      return res.status(400).json({ message: "Not available at the moment" });
+    }
+
+    if (selectedBankMatch.toLowerCase() !== "icici") {
+      return res.status(400).json({ message: "Yet to be added" });
+    }
+
+    let finalAmount = paymentRequest.amount;
+    const isVariableAmount = paymentRequest?.isAmountFixed === false;
+
+    if (isVariableAmount) {
+      if (customAmount === undefined || customAmount === null) {
+        return res.status(400).json({ message: "Amount is required for variable payment requests" });
+      }
+
+      const parsedAmount = Number(customAmount);
+      if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+        return res.status(400).json({ message: "Please provide a valid positive amount" });
+      }
+
+      finalAmount = parsedAmount;
+    }
+
+    const paymentRecordId = crypto.randomUUID();
+    const returnURLWithTracking = returnURL;
+
+    try {
+      const paymentGatewayResponse = await initiateIciciSaleOverride({
+        amount: finalAmount,
+        returnURL: returnURL,
+        userEmail: user.email,
+      });
+
+      const now = new Date().toISOString();
+      const paymentRecord = {
+        id: paymentRecordId,
+        status: "pending",
+        student: {
+          userId: user.id,
+          roll_no: user.roll_no,
+          name: user.name,
+          email: user.email,
+        },
+        paymentRequestId,
+        transaction: {
+          transaction_id: paymentGatewayResponse?.requestPacket?.merchantTxnNo || null,
+          merchant_id: paymentGatewayResponse?.requestPacket?.merchantId || null,
+          response_code: "PENDING",
+          amount: Number(Number(finalAmount).toFixed(2)),
+          date: now,
+        },
+        bank: {
+          bank_id: selectedBankDoc?.id || selectedBankMatch,
+          bank_name: selectedBankDoc?.displayName || selectedBankMatch,
+        },
+        gateway: {
+          tranCtx: paymentGatewayResponse?.tranCtx || null,
+          requestPacket: paymentGatewayResponse?.requestPacket || null,
+          responsePacket: paymentGatewayResponse?.responsePacket || null,
+        },
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      await createPaymentProcessedRecordOverride(paymentRecord);
+
+      return res.json({
+        ...paymentGatewayResponse,
+        paymentRecordId,
+        returnURL: returnURLWithTracking,
+        status: "pending",
+      });
+    } catch (error) {
+      if (error?.status) {
+        return res.status(error.status).json({
+          message: error.message || "Failed to initiate ICICI payment",
+          ...(error?.details || {}),
+        });
+      }
+      throw error;
+    }
+  };
+}
+
 export function createVerifyUserPaymentStatusHandler({
   findUserById: findUserByIdOverride = findUserById,
   findPaymentProcessedById: findPaymentProcessedByIdOverride = findPaymentProcessedById,
@@ -248,6 +395,7 @@ export function createVerifyUserPaymentStatusHandler({
 }
 
 const verifyUserPaymentStatus = createVerifyUserPaymentStatusHandler();
+const initiateUserPaymentSale = createInitiateUserPaymentSaleHandler();
 
 router.get("/pending", requireAuth, requireRole("user"), async (req, res) => {
   const userId = req.auth.sub;
@@ -288,129 +436,7 @@ router.get("/history", requireAuth, requireRole("user"), async (req, res) => {
   return res.json({ transactions: buildUserHistoryView(records, requestContexts, events) });
 });
 
-router.post("/initiate-sale", requireAuth, requireRole("user"), async (req, res) => {
-  const paymentRequestId = String(req.body?.paymentRequestId || "").trim();
-  const returnURL = String(req.body?.returnURL || "").trim();
-  const selectedBankInput = String(req.body?.bank || "").trim();
-  const customAmount = req.body?.customAmount;
-
-  if (!paymentRequestId) {
-    return res.status(400).json({ message: "paymentRequestId is required" });
-  }
-
-  if (!returnURL) {
-    return res.status(400).json({ message: "returnURL is required" });
-  }
-
-  const user = await findUserById(req.auth.sub);
-  if (!user) {
-    return res.status(404).json({ message: "User not found" });
-  }
-
-  const paymentRequest = await resolvePayableRequestForUser(paymentRequestId, user);
-  if (!paymentRequest) {
-    return res.status(404).json({ message: "Payment request not found" });
-  }
-
-  const enabledBanks = getEnabledBanks(paymentRequest);
-  if (!enabledBanks.length) {
-    return res.status(400).json({ message: "No banks are enabled for this payment request" });
-  }
-
-  const selectedBank = selectedBankInput || enabledBanks[0];
-  const selectedBankMatch = enabledBanks.find(
-    (bank) => bank.toLowerCase() === selectedBank.toLowerCase()
-  );
-  if (!selectedBankMatch) {
-    return res.status(400).json({ message: "Selected bank is not enabled for this payment request" });
-  }
-
-  const selectedBankDoc = await findBankByDisplayName(selectedBankMatch);
-  const isEnabled = typeof selectedBankDoc?.enabled === "boolean" ? selectedBankDoc.enabled : true;
-
-  if (!isEnabled) {
-    return res.status(400).json({ message: "Not available at the moment" });
-  }
-
-  if (selectedBankMatch.toLowerCase() !== "icici") {
-    return res.status(400).json({ message: "Yet to be added" });
-  }
-
-  let finalAmount = paymentRequest.amount;
-  const isVariableAmount = paymentRequest?.isAmountFixed === false;
-
-  if (isVariableAmount) {
-    if (customAmount === undefined || customAmount === null) {
-      return res.status(400).json({ message: "Amount is required for variable payment requests" });
-    }
-
-    const parsedAmount = Number(customAmount);
-    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-      return res.status(400).json({ message: "Please provide a valid positive amount" });
-    }
-
-    finalAmount = parsedAmount;
-  }
-
-  const paymentRecordId = crypto.randomUUID();
-  const returnURLWithTracking = returnURL;
-
-  try {
-    const paymentGatewayResponse = await initiateIciciSale({
-      amount: finalAmount,
-      returnURL: returnURL,
-      userEmail: user.email,
-    });
-
-    const now = new Date().toISOString();
-    const paymentRecord = {
-      id: paymentRecordId,
-      status: "pending",
-      student: {
-        userId: user.id,
-        roll_no: user.roll_no,
-        name: user.name,
-        email: user.email,
-      },
-      paymentRequestId,
-      transaction: {
-        transaction_id: paymentGatewayResponse?.requestPacket?.merchantTxnNo || null,
-        merchant_id: paymentGatewayResponse?.requestPacket?.merchantId || null,
-        response_code: "PENDING",
-        amount: Number(Number(finalAmount).toFixed(2)),
-        date: now,
-      },
-      bank: {
-        bank_id: selectedBankDoc?.id || selectedBankMatch,
-        bank_name: selectedBankDoc?.displayName || selectedBankMatch,
-      },
-      gateway: {
-        tranCtx: paymentGatewayResponse?.tranCtx || null,
-        requestPacket: paymentGatewayResponse?.requestPacket || null,
-        responsePacket: paymentGatewayResponse?.responsePacket || null,
-      },
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    await createPaymentProcessedRecord(paymentRecord);
-
-    return res.json({
-      ...paymentGatewayResponse,
-      paymentRecordId,
-      returnURL: returnURL,
-      status: "pending",
-    });
-  } catch (error) {
-    if (error?.status) {
-      return res.status(error.status).json({
-        message: error.message || "Failed to initiate ICICI payment",
-        ...(error?.details || {}),
-      });
-    }
-    throw error;
-  }
-});
+router.post("/initiate-sale", requireAuth, requireRole("user"), initiateUserPaymentSale);
 
 router.post("/verify-status", requireAuth, requireRole("user"), verifyUserPaymentStatus);
 

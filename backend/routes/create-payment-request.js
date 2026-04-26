@@ -106,41 +106,64 @@ async function buildLatestPaymentRequestView(paymentRequest, systemHeadId) {
   };
 }
 
-router.get(
-  "/:eventId/payment-requests/latest",
-  requireAuth,
-  requireRole("system_head"),
-  async (req, res) => {
-    const eventId = String(req.params?.eventId || "").trim();
-    const systemHeadId = req.auth.sub;
+export function createCreatePaymentRequestHandler({
+  findEventByIdForSystemHead: findEventByIdForSystemHeadOverride = findEventByIdForSystemHead,
+  createOneTimePaymentRequestRecords: createOneTimePaymentRequestRecordsOverride = createOneTimePaymentRequestRecords,
+  createFixedPaymentRequestRecord: createFixedPaymentRequestRecordOverride = createFixedPaymentRequestRecord,
+  createRecurringTemplateRecord: createRecurringTemplateRecordOverride = createRecurringTemplateRecord,
+  findLatestPaymentRequestByEventAndSystemHead:
+    findLatestPaymentRequestByEventAndSystemHeadOverride = findLatestPaymentRequestByEventAndSystemHead,
+  listBanks: listBanksOverride = listBanks,
+} = {}) {
+  async function resolveEnabledBanksOverride(inputBank, inputBanks) {
+    const candidates = [
+      String(inputBank || "").trim(),
+      ...(Array.isArray(inputBanks) ? inputBanks.map((entry) => String(entry || "").trim()) : []),
+    ].filter(Boolean);
 
-    const event = await findEventByIdForSystemHead(eventId, systemHeadId);
-    if (!event) {
-      return res.status(404).json({ message: "Event not found" });
+    if (!candidates.length) {
+      return [];
     }
 
-    const paymentRequest = await findLatestPaymentRequestByEventAndSystemHead(eventId, systemHeadId);
-    const paymentRequestView = await buildLatestPaymentRequestView(paymentRequest, systemHeadId);
-    return res.json({ paymentRequest: paymentRequestView || null });
-  }
-);
+    const banks = await listBanksOverride();
+    const enabledBanks = banks.filter((bank) => (typeof bank.enabled === "boolean" ? bank.enabled : true));
+    const byId = new Map();
+    const byName = new Map();
 
-router.post(
-  "/:eventId/payment-requests",
-  requireAuth,
-  requireRole("system_head"),
-  async (req, res) => {
+    enabledBanks.forEach((bank) => {
+      byId.set(String(bank.id || "").trim(), bank.displayName);
+      byName.set(String(bank.normalizedDisplayName || "").trim(), bank.displayName);
+    });
+
+    const enabled = [];
+    for (const candidate of candidates) {
+      const byIdValue = byId.get(candidate);
+      if (byIdValue) {
+        enabled.push(byIdValue);
+        continue;
+      }
+
+      const byNameValue = byName.get(candidate.toLowerCase());
+      if (byNameValue) {
+        enabled.push(byNameValue);
+      }
+    }
+
+    return [...new Set(enabled)];
+  }
+
+  return async (req, res) => {
     const eventId = String(req.params?.eventId || "").trim();
     const systemHeadId = req.auth.sub;
     const type = String(req.body?.type || "").trim().toLowerCase();
-    const banks = await resolveEnabledBanks(req.body?.bank, req.body?.banks);
+    const banks = await resolveEnabledBanksOverride(req.body?.bank, req.body?.banks);
 
-    const event = await findEventByIdForSystemHead(eventId, systemHeadId);
+    const event = await findEventByIdForSystemHeadOverride(eventId, systemHeadId);
     if (!event) {
       return res.status(404).json({ message: "Event not found" });
     }
 
-    const existingRequest = await findLatestPaymentRequestByEventAndSystemHead(eventId, systemHeadId);
+    const existingRequest = await findLatestPaymentRequestByEventAndSystemHeadOverride(eventId, systemHeadId);
     if (existingRequest) {
       return res.status(409).json({
         message: "Payment request already exists for this event",
@@ -191,18 +214,16 @@ router.post(
         updatedAt: now,
       }));
 
-      await createOneTimePaymentRequestRecords(paymentRequests);
+      await createOneTimePaymentRequestRecordsOverride(paymentRequests);
       console.log(
         `[Create Payment] Created ${paymentRequests.length} one-time payment(s) for event ${eventId} ` +
         `(SystemID: ${systemHeadId}, Amounts: ${paymentRequests.map(p => p.amount).join(', ')})`
       );
 
-      // Check if this one-time payment should be marked as recurring
       const isRecurring = req.body?.isRecurring === true;
       let recurringTemplate = null;
 
       if (isRecurring) {
-        // Validate recurring options
         const intervalValue = Number(req.body?.intervalValue);
         const intervalUnit = String(req.body?.intervalUnit || "").trim().toLowerCase();
 
@@ -218,15 +239,13 @@ router.post(
           });
         }
 
-        // Calculate next execution date
         const nextExecutionDate = calculateNextExecutionDate(new Date(), intervalValue, intervalUnit).toISOString();
 
-        // Create recurring template with all necessary data
         recurringTemplate = {
           id: crypto.randomUUID(),
           eventId,
           createdBySystemHeadId: systemHeadId,
-          entries: entries.map(e => ({ rollNo: e.rollNo, amount: e.amount })),
+          entries: entries.map((e) => ({ rollNo: e.rollNo, amount: e.amount })),
           bank: banks[0],
           banks,
           originalTimeToLive: ttl.toISOString(),
@@ -241,7 +260,7 @@ router.post(
           lastGeneratedPaymentIds: [],
         };
 
-        await createRecurringTemplateRecord(recurringTemplate);
+        await createRecurringTemplateRecordOverride(recurringTemplate);
         console.log(
           `[Create Payment] Created recurring template ${recurringTemplate.id} for one-time payment ` +
           `(Event: ${eventId}, Interval: ${intervalValue} ${intervalUnit})`
@@ -287,14 +306,42 @@ router.post(
         updatedAt: now,
       };
 
-      await createFixedPaymentRequestRecord(paymentRequest);
+      await createFixedPaymentRequestRecordOverride(paymentRequest);
       console.log(
         `[Create Payment] Created fixed payment request ${paymentRequest.id} for event ${eventId} ` +
         `(SystemID: ${systemHeadId}, isAmountFixed: ${isAmountFixed}, amount: ${isAmountFixed ? amount : 'variable'})`
       );
       return res.status(201).json({ paymentRequest, table: "Fixed_Payment_Request" });
     }
+  };
+}
+
+router.get(
+  "/:eventId/payment-requests/latest",
+  requireAuth,
+  requireRole("system_head"),
+  async (req, res) => {
+    const eventId = String(req.params?.eventId || "").trim();
+    const systemHeadId = req.auth.sub;
+
+    const event = await findEventByIdForSystemHead(eventId, systemHeadId);
+    if (!event) {
+      return res.status(404).json({ message: "Event not found" });
+    }
+
+    const paymentRequest = await findLatestPaymentRequestByEventAndSystemHead(eventId, systemHeadId);
+    const paymentRequestView = await buildLatestPaymentRequestView(paymentRequest, systemHeadId);
+    return res.json({ paymentRequest: paymentRequestView || null });
   }
+);
+
+const createPaymentRequest = createCreatePaymentRequestHandler();
+
+router.post(
+  "/:eventId/payment-requests",
+  requireAuth,
+  requireRole("system_head"),
+  createPaymentRequest
 );
 
 function calculateNextExecutionDate(baseDate, value, unit) {
