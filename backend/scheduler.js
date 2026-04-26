@@ -16,6 +16,7 @@ import {
   createRefundRecord,
   updateRefundRecordById,
 } from "./db.js";
+import { normalizeStoredPaymentStatus, resolveStatusAfterHashVerification } from "./payment-status.js";
 import { checkIciciSaleStatus, initiateIciciRefund } from "./routes/bank-payment/icici.js";
 import { syncIciciSettlementHistoryForPreviousDay } from "./settlement.js";
 
@@ -37,11 +38,7 @@ function calculateNextExecutionDate(currentDate, intervalValue, intervalUnit) {
 }
 
 function normalizeStatus(status) {
-  const normalized = String(status || "").trim().toLowerCase();
-  if (["success", "failed", "pending"].includes(normalized)) {
-    return normalized;
-  }
-  return "pending";
+  return normalizeStoredPaymentStatus(status);
 }
 
 function normalizeRollNo(input) {
@@ -219,12 +216,13 @@ async function reconcileSinglePaymentRecord(paymentRecord, contextByPaymentReque
     return;
   }
 
-  const effectiveStatus = statusResult.hashVerified ? normalizeStatus(statusResult.status) : currentStatus;
+  const verificationDecision = resolveStatusAfterHashVerification(currentStatus, statusResult);
+  const effectiveStatus = verificationDecision.persistedStatus;
   const transition = getTransitionKey(currentStatus, effectiveStatus);
   const context = contextByPaymentRequestId.get(String(paymentRecord?.paymentRequestId || "").trim()) || null;
 
   const baseUpdate = {
-    pendingHashVerificationRetry: !statusResult.hashVerified,
+    pendingHashVerificationRetry: verificationDecision.pendingHashVerificationRetry,
     gateway: {
       ...(paymentRecord.gateway || {}),
       tranCtx: paymentRecord?.gateway?.tranCtx || null,
@@ -473,18 +471,19 @@ export async function retryPendingHashVerifications() {
       const originalTxnNo = String(record?.gateway?.originalTxnNo || "").trim() || merchantTxnNo;
 
       const statusResult = await checkIciciSaleStatus({ merchantTxnNo, tranCtx, originalTxnNo });
+      const verificationDecision = resolveStatusAfterHashVerification(record.status, statusResult);
 
-      if (!statusResult.hashVerified) {
+      if (!verificationDecision.shouldPersistFinalStatus) {
         console.log(`[Scheduler] Hash still invalid for record ${record.id}. Keeping pending.`);
         continue;
       }
 
-      const finalStatus = statusResult.status;
+      const finalStatus = verificationDecision.persistedStatus;
       const dbStatusLabel = statusResult.dbStatusLabel || (finalStatus === "success" ? "SUCCESSFUL" : "FAILURE");
 
       await updatePaymentProcessedById(record.id, {
         status: finalStatus,
-        pendingHashVerificationRetry: false,
+        pendingHashVerificationRetry: verificationDecision.pendingHashVerificationRetry,
         transaction: {
           ...(record.transaction || {}),
           status: dbStatusLabel,

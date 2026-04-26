@@ -16,6 +16,7 @@ import {
   updatePaymentRequestStatusById,
 } from "../db.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
+import { resolveStatusAfterHashVerification } from "../payment-status.js";
 import { normalizeRollNo } from "../utils.js";
 import { initiateIciciSale, checkIciciSaleStatus } from "./bank-payment/icici.js";
 
@@ -120,6 +121,133 @@ async function resolvePayableRequestForUser(paymentRequestId, user) {
   const fixedRequest = await findFixedPaymentRequestById(paymentRequestId);
   return fixedRequest || null;
 }
+
+export function createVerifyUserPaymentStatusHandler({
+  findUserById: findUserByIdOverride = findUserById,
+  findPaymentProcessedById: findPaymentProcessedByIdOverride = findPaymentProcessedById,
+  listPaymentProcessedByUserId: listPaymentProcessedByUserIdOverride = listPaymentProcessedByUserId,
+  updatePaymentProcessedById: updatePaymentProcessedByIdOverride = updatePaymentProcessedById,
+  updatePaymentRequestStatusById: updatePaymentRequestStatusByIdOverride = updatePaymentRequestStatusById,
+  checkIciciSaleStatus: checkIciciSaleStatusOverride = checkIciciSaleStatus,
+} = {}) {
+  return async (req, res) => {
+    const paymentRecordId = String(req.body?.paymentRecordId || "").trim();
+    const fallbackPaymentRequestId = String(req.body?.paymentRequestId || "").trim();
+    const originalTxnNoInput = String(req.body?.originalTxnNo || req.body?.tranCtx || "").trim();
+
+    if (!paymentRecordId && !fallbackPaymentRequestId) {
+      return res.status(400).json({ message: "paymentRecordId or paymentRequestId is required" });
+    }
+
+    const user = await findUserByIdOverride(req.auth.sub);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    let paymentRecord = null;
+    if (paymentRecordId) {
+      paymentRecord = await findPaymentProcessedByIdOverride(paymentRecordId);
+    }
+
+    if (!paymentRecord && fallbackPaymentRequestId) {
+      const records = await listPaymentProcessedByUserIdOverride(user.id);
+      paymentRecord = records.find((record) => String(record.paymentRequestId || "").trim() === fallbackPaymentRequestId) || null;
+    }
+
+    if (!paymentRecord) {
+      return res.status(404).json({ message: "Payment record not found" });
+    }
+
+    if (String(paymentRecord?.student?.userId || "") !== String(user.id)) {
+      return res.status(403).json({ message: "You are not allowed to verify this payment" });
+    }
+
+    if (String(paymentRecord.status || "").toLowerCase() === "success") {
+      return res.json({
+        status: "success",
+        paymentRecord,
+        message: "Payment is already marked as success",
+      });
+    }
+
+    const merchantTxnNo = String(paymentRecord?.transaction?.transaction_id || "").trim();
+    const originalTxnNo =
+      originalTxnNoInput ||
+      String(paymentRecord?.gateway?.originalTxnNo || "").trim() ||
+      String(paymentRecord?.gateway?.tranCtx || "").trim() ||
+      String(paymentRecord?.gateway?.responsePacket?.originalTxnNo || "").trim() ||
+      String(paymentRecord?.gateway?.responsePacket?.tranCtx || "").trim() ||
+      merchantTxnNo;
+
+    try {
+      const statusResult = await checkIciciSaleStatusOverride({
+        merchantTxnNo,
+        originalTxnNo,
+      });
+      const verificationDecision = resolveStatusAfterHashVerification(paymentRecord.status, statusResult);
+
+      if (!verificationDecision.shouldPersistFinalStatus) {
+        const updatedPaymentRecord = await updatePaymentProcessedByIdOverride(paymentRecord.id, {
+          pendingHashVerificationRetry: verificationDecision.pendingHashVerificationRetry,
+          gateway: {
+            ...(paymentRecord.gateway || {}),
+            tranCtx: paymentRecord?.gateway?.tranCtx || null,
+            originalTxnNo,
+            statusRequestPacket: statusResult.requestPacket,
+            statusResponsePacket: statusResult.responsePacket,
+          },
+        });
+
+        return res.json({
+          status: verificationDecision.responseStatus,
+          paymentRecord: updatedPaymentRecord || paymentRecord,
+          message: "Payment status could not be verified. Will retry automatically.",
+        });
+      }
+
+      const finalStatus = verificationDecision.persistedStatus;
+      const dbStatusLabel = statusResult.dbStatusLabel || (finalStatus === "success" ? "SUCCESSFUL" : "FAILURE");
+
+      const updatedPaymentRecord = await updatePaymentProcessedByIdOverride(paymentRecord.id, {
+        status: finalStatus,
+        pendingHashVerificationRetry: verificationDecision.pendingHashVerificationRetry,
+        transaction: {
+          ...(paymentRecord.transaction || {}),
+          status: dbStatusLabel,
+          response_code: dbStatusLabel,
+          date: new Date().toISOString(),
+        },
+        gateway: {
+          ...(paymentRecord.gateway || {}),
+          tranCtx: paymentRecord?.gateway?.tranCtx || null,
+          originalTxnNo,
+          statusRequestPacket: statusResult.requestPacket,
+          statusResponsePacket: statusResult.responsePacket,
+          txnRespDescription: statusResult.txnRespDescription || null,
+        },
+      });
+
+      await updatePaymentRequestStatusByIdOverride(paymentRecord.paymentRequestId, finalStatus);
+
+      return res.json({
+        status: finalStatus,
+        paymentRecord: updatedPaymentRecord || paymentRecord,
+        statusSignal: statusResult.statusSignal,
+        txnRespDescription: statusResult.txnRespDescription || null,
+      });
+    } catch (error) {
+      if (error?.status) {
+        return res.status(error.status).json({
+          message: error.message || "Failed to verify payment status",
+          ...(error?.details || {}),
+        });
+      }
+      throw error;
+    }
+  };
+}
+
+const verifyUserPaymentStatus = createVerifyUserPaymentStatusHandler();
 
 router.get("/pending", requireAuth, requireRole("user"), async (req, res) => {
   const userId = req.auth.sub;
@@ -284,119 +412,6 @@ router.post("/initiate-sale", requireAuth, requireRole("user"), async (req, res)
   }
 });
 
-router.post("/verify-status", requireAuth, requireRole("user"), async (req, res) => {
-  const paymentRecordId = String(req.body?.paymentRecordId || "").trim();
-  const fallbackPaymentRequestId = String(req.body?.paymentRequestId || "").trim();
-  const originalTxnNoInput = String(req.body?.originalTxnNo || req.body?.tranCtx || "").trim();
-
-  if (!paymentRecordId && !fallbackPaymentRequestId) {
-    return res.status(400).json({ message: "paymentRecordId or paymentRequestId is required" });
-  }
-
-  const user = await findUserById(req.auth.sub);
-  if (!user) {
-    return res.status(404).json({ message: "User not found" });
-  }
-
-  let paymentRecord = null;
-  if (paymentRecordId) {
-    paymentRecord = await findPaymentProcessedById(paymentRecordId);
-  }
-
-  if (!paymentRecord && fallbackPaymentRequestId) {
-    const records = await listPaymentProcessedByUserId(user.id);
-    paymentRecord = records.find((record) => String(record.paymentRequestId || "").trim() === fallbackPaymentRequestId) || null;
-  }
-
-  if (!paymentRecord) {
-    return res.status(404).json({ message: "Payment record not found" });
-  }
-
-  if (String(paymentRecord?.student?.userId || "") !== String(user.id)) {
-    return res.status(403).json({ message: "You are not allowed to verify this payment" });
-  }
-
-  if (String(paymentRecord.status || "").toLowerCase() === "success") {
-    return res.json({
-      status: "success",
-      paymentRecord,
-      message: "Payment is already marked as success",
-    });
-  }
-
-  const merchantTxnNo = String(paymentRecord?.transaction?.transaction_id || "").trim();
-  const originalTxnNo =
-    originalTxnNoInput ||
-    String(paymentRecord?.gateway?.originalTxnNo || "").trim() ||
-    String(paymentRecord?.gateway?.tranCtx || "").trim() ||
-    String(paymentRecord?.gateway?.responsePacket?.originalTxnNo || "").trim() ||
-    String(paymentRecord?.gateway?.responsePacket?.tranCtx || "").trim() ||
-    merchantTxnNo;
-
-  try {
-    const statusResult = await checkIciciSaleStatus({
-      merchantTxnNo,
-      originalTxnNo,
-    });
-
-    if (!statusResult.hashVerified) {
-      const updatedPaymentRecord = await updatePaymentProcessedById(paymentRecord.id, {
-        pendingHashVerificationRetry: true,
-        gateway: {
-          ...(paymentRecord.gateway || {}),
-          tranCtx: paymentRecord?.gateway?.tranCtx || null,
-          originalTxnNo,
-          statusRequestPacket: statusResult.requestPacket,
-          statusResponsePacket: statusResult.responsePacket,
-        },
-      });
-
-      return res.json({
-        status: "pending",
-        paymentRecord: updatedPaymentRecord || paymentRecord,
-        message: "Payment status could not be verified. Will retry automatically.",
-      });
-    }
-
-    const finalStatus = statusResult.status;
-    const dbStatusLabel = statusResult.dbStatusLabel || (finalStatus === "success" ? "SUCCESSFUL" : "FAILURE");
-
-    const updatedPaymentRecord = await updatePaymentProcessedById(paymentRecord.id, {
-      status: finalStatus,
-      pendingHashVerificationRetry: false,
-      transaction: {
-        ...(paymentRecord.transaction || {}),
-        status: dbStatusLabel,
-        response_code: dbStatusLabel,
-        date: new Date().toISOString(),
-      },
-      gateway: {
-        ...(paymentRecord.gateway || {}),
-        tranCtx: paymentRecord?.gateway?.tranCtx || null,
-        originalTxnNo,
-        statusRequestPacket: statusResult.requestPacket,
-        statusResponsePacket: statusResult.responsePacket,
-        txnRespDescription: statusResult.txnRespDescription || null,
-      },
-    });
-
-    await updatePaymentRequestStatusById(paymentRecord.paymentRequestId, finalStatus);
-
-    return res.json({
-      status: finalStatus,
-      paymentRecord: updatedPaymentRecord || paymentRecord,
-      statusSignal: statusResult.statusSignal,
-      txnRespDescription: statusResult.txnRespDescription || null,
-    });
-  } catch (error) {
-    if (error?.status) {
-      return res.status(error.status).json({
-        message: error.message || "Failed to verify payment status",
-        ...(error?.details || {}),
-      });
-    }
-    throw error;
-  }
-});
+router.post("/verify-status", requireAuth, requireRole("user"), verifyUserPaymentStatus);
 
 export default router;

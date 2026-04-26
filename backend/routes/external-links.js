@@ -14,6 +14,7 @@ import {
   updatePaymentProcessedById,
 } from "../db.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
+import { resolveStatusAfterHashVerification } from "../payment-status.js";
 import { checkIciciSaleStatus, initiateIciciSale } from "./bank-payment/icici.js";
 
 const router = Router();
@@ -416,6 +417,7 @@ router.post("/verify-status", async (req, res) => {
       merchantTxnNo,
       originalTxnNo,
     });
+    const verificationDecision = resolveStatusAfterHashVerification(paymentRecord.status, statusResult);
 
     console.log(
       "[External verify-status] ICICI status check result:",
@@ -433,9 +435,9 @@ router.post("/verify-status", async (req, res) => {
       )
     );
 
-    if (!statusResult.hashVerified) {
+    if (!verificationDecision.shouldPersistFinalStatus) {
       const updatedPaymentRecord = await updatePaymentProcessedById(paymentRecord.id, {
-        pendingHashVerificationRetry: true,
+        pendingHashVerificationRetry: verificationDecision.pendingHashVerificationRetry,
         gateway: {
           ...(paymentRecord.gateway || {}),
           tranCtx: paymentRecord?.gateway?.tranCtx || null,
@@ -446,18 +448,18 @@ router.post("/verify-status", async (req, res) => {
       });
 
       return res.json({
-        status: "pending",
+        status: verificationDecision.responseStatus,
         paymentRecord: updatedPaymentRecord || paymentRecord,
         message: "Payment status could not be verified. Will retry automatically.",
       });
     }
 
-    const finalStatus = statusResult.status;
+    const finalStatus = verificationDecision.persistedStatus;
     const dbStatusLabel = statusResult.dbStatusLabel || (finalStatus === "success" ? "SUCCESSFUL" : "FAILURE");
 
     const updatedPaymentRecord = await updatePaymentProcessedById(paymentRecord.id, {
       status: finalStatus,
-      pendingHashVerificationRetry: false,
+      pendingHashVerificationRetry: verificationDecision.pendingHashVerificationRetry,
       transaction: {
         ...(paymentRecord.transaction || {}),
         status: dbStatusLabel,
