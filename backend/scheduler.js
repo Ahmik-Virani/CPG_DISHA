@@ -216,12 +216,34 @@ async function reconcileSinglePaymentRecord(paymentRecord, contextByPaymentReque
     });
   } catch (error) {
     console.error(`[Scheduler] Reconciliation status check failed for ${paymentRecord.id}:`, error?.message || error);
+    
+    // Still update the record with the failed status check attempt
+    const reconciliation = paymentRecord?.reconciliation || {};
+    const failedStatusChecks = Number(reconciliation.failedStatusChecks || 0) + 1;
+    
+    await updatePaymentProcessedById(paymentRecord.id, {
+      gateway: {
+        ...(paymentRecord.gateway || {}),
+        tranCtx: paymentRecord?.gateway?.tranCtx || null,
+        originalTxnNo,
+      },
+      reconciliation: computeUpdatedReconciliation(paymentRecord, {
+        failedStatusChecks,
+        firstFailedAt: reconciliation.firstFailedAt || new Date().toISOString(),
+      }),
+    });
     return;
   }
 
   const effectiveStatus = statusResult.hashVerified ? normalizeStatus(statusResult.status) : currentStatus;
   const transition = getTransitionKey(currentStatus, effectiveStatus);
   const context = contextByPaymentRequestId.get(String(paymentRecord?.paymentRequestId || "").trim()) || null;
+
+  // Log reconciliation attempt details for debugging
+  console.log(`[Scheduler] Reconciling record ${paymentRecord.id}:`);
+  console.log(`  currentStatus=${currentStatus}, effectiveStatus=${effectiveStatus}, hashVerified=${statusResult.hashVerified}`);
+  console.log(`  ICICI response: txnRespDescription=${statusResult.txnRespDescription}, statusSignal=${statusResult.statusSignal}`);
+  console.log(`  merchantTxnNo=${merchantTxnNo}, tranCtx=${tranCtx}, originalTxnNo=${originalTxnNo}`);
 
   const baseUpdate = {
     pendingHashVerificationRetry: !statusResult.hashVerified,
