@@ -350,6 +350,11 @@ export async function listPaymentProcessedByPaymentRequestIds(paymentRequestIds)
     .toArray();
 }
 
+export async function hasPaymentProcessedForRequest(paymentRequestId) {
+  const count = await getPaymentProcessedCollection().countDocuments({ paymentRequestId });
+  return count > 0;
+}
+
 export async function listExternalPaymentProcessedBySystemHeadId(systemHeadId) {
   return getPaymentProcessedCollection()
     .find({
@@ -563,14 +568,21 @@ export async function findRecurringTemplateById(templateId) {
   return getRecurringTemplatesCollection().findOne({ id: templateId });
 }
 
+export async function findLatestRecurringTemplateByEventAndSystemHead(eventId, systemHeadId) {
+  return getRecurringTemplatesCollection()
+    .find({ eventId, createdBySystemHeadId: systemHeadId })
+    .sort({ createdAt: -1 })
+    .limit(1)
+    .next();
+}
+
 export async function listRecurringTemplatesForExecution() {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const now = new Date();
   
   return getRecurringTemplatesCollection()
     .find({
       status: "active",
-      nextExecutionDate: { $lte: today.toISOString() },
+      nextExecutionDate: { $lte: now.toISOString() },
     })
     .toArray();
 }
@@ -595,6 +607,43 @@ export async function updateRecurringTemplateById(templateId, updateFields) {
   }
 
   return result.value || result;
+}
+
+export async function deactivateRecurringTemplatesByEventId(eventId, systemHeadId) {
+  const now = new Date().toISOString();
+  const templates = await getRecurringTemplatesCollection()
+    .find({ eventId, createdBySystemHeadId: systemHeadId, status: "active" })
+    .project({ _id: 0, id: 1 })
+    .toArray();
+
+  if (!templates.length) {
+    return {
+      matchedCount: 0,
+      modifiedCount: 0,
+      templates: [],
+    };
+  }
+
+  const result = await getRecurringTemplatesCollection().updateMany(
+    { eventId, createdBySystemHeadId: systemHeadId, status: "active" },
+    {
+      $set: {
+        status: "inactive",
+        updatedAt: now,
+      },
+    }
+  );
+
+  const ids = templates.map((template) => String(template.id || "").trim()).filter(Boolean);
+  const updatedTemplates = ids.length
+    ? await getRecurringTemplatesCollection().find({ id: { $in: ids } }).toArray()
+    : [];
+
+  return {
+    matchedCount: result.matchedCount || 0,
+    modifiedCount: result.modifiedCount || 0,
+    templates: updatedTemplates,
+  };
 }
 
 export async function deleteRecurringTemplateById(templateId) {
@@ -820,6 +869,17 @@ export async function markEventDone(eventId, systemHeadId) {
 }
 
 export async function deleteEventById(eventId, systemHeadId) {
+  // Block deletion if any payment requests exist for this event
+  const [fixedCount, oneTimeCount, recurringCount] = await Promise.all([
+    getFixedPaymentRequestsCollection().countDocuments({ eventId, createdBySystemHeadId: systemHeadId }),
+    getOneTimePaymentRequestsCollection().countDocuments({ eventId, createdBySystemHeadId: systemHeadId }),
+    getRecurringTemplatesCollection().countDocuments({ eventId, createdBySystemHeadId: systemHeadId }),
+  ]);
+
+  if (fixedCount + oneTimeCount + recurringCount > 0) {
+    return { deletedCount: 0, hasPaymentRequests: true };
+  }
+
   // First, find all recurring templates for this event to log them
   const templates = await getRecurringTemplatesCollection()
     .find({ eventId, createdBySystemHeadId: systemHeadId })

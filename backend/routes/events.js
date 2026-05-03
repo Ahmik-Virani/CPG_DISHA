@@ -8,6 +8,7 @@ import {
   findEventByIdForSystemHead,
   markEventDone,
   deleteEventById,
+  deactivateRecurringTemplatesByEventId,
   listBanks,
   getAllPaymentRequestTypesByEventIds,
   listPaymentRequestIdsBySystemHead,
@@ -185,8 +186,31 @@ router.patch("/:eventId/complete", requireAuth, requireRole("system_head"), asyn
   return res.json({ event });
 });
 
+router.patch("/:eventId/recurring/stop", requireAuth, requireRole("system_head"), async (req, res) => {
+  const eventId = String(req.params?.eventId || "").trim();
+  const event = await findEventByIdForSystemHead(eventId, req.auth.sub);
+
+  if (!event) {
+    return res.status(404).json({ message: "Event not found" });
+  }
+
+  const result = await deactivateRecurringTemplatesByEventId(eventId, req.auth.sub);
+  if (!result.matchedCount) {
+    return res.status(404).json({ message: "No active recurring template found for this event" });
+  }
+
+  return res.json({
+    message: "Recurring payment stopped successfully",
+    recurringTemplates: result.templates || [],
+  });
+});
+
 router.delete("/:eventId", requireAuth, requireRole("system_head"), async (req, res) => {
   const result = await deleteEventById(req.params.eventId, req.auth.sub);
+
+  if (result.hasPaymentRequests) {
+    return res.status(409).json({ message: "Cannot delete an event that has payment requests. Use the complete option instead." });
+  }
 
   if (!result.deletedCount) {
     return res.status(404).json({ message: "Event not found" });

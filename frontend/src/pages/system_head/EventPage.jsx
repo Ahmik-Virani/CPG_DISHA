@@ -87,7 +87,7 @@ export default function EventPage() {
   };
 
   const handleDelete = async () => {
-    if (!window.confirm("Delete this event? This cannot be undone.")) return;
+    if (!window.confirm("Delete this event? This is only allowed if no payment requests have been created.")) return;
     setIsActing(true);
     setError("");
     try {
@@ -133,6 +133,30 @@ export default function EventPage() {
       }
     } catch (err) {
       setError(err.message || "Failed to delete payment request");
+    } finally {
+      setIsActing(false);
+    }
+  };
+
+  const handleStopRecurring = async () => {
+    if (!paymentRequest?.recurringTemplate || paymentRequest.recurringTemplate.status !== "active") {
+      return;
+    }
+    if (!window.confirm("Stop future recurring generations for this event? Existing payment requests will remain.")) {
+      return;
+    }
+
+    setIsActing(true);
+    setError("");
+    try {
+      const data = await eventApi.stopRecurring(token, eventId);
+      const updatedTemplate = Array.isArray(data?.recurringTemplates) ? data.recurringTemplates[0] || null : null;
+      setPaymentRequest((prev) => prev ? ({
+        ...prev,
+        recurringTemplate: updatedTemplate || { ...(prev.recurringTemplate || {}), status: "inactive" },
+      }) : prev);
+    } catch (err) {
+      setError(err.message || "Failed to stop recurring payment");
     } finally {
       setIsActing(false);
     }
@@ -251,7 +275,7 @@ export default function EventPage() {
           setPaymentFeedback({ type: "error", message: "Interval value must be greater than 0." });
           return;
         }
-        if (!["days", "months"].includes(paymentForm.intervalUnit)) {
+        if (!["minutes", "days", "months"].includes(paymentForm.intervalUnit)) {
           setPaymentFeedback({ type: "error", message: "Please select a valid interval unit." });
           return;
         }
@@ -385,14 +409,16 @@ export default function EventPage() {
                   >
                     {event.isOngoing ? "Mark as Done" : "Completed"}
                   </button>
-                  <button
-                    type="button"
-                    onClick={handleDelete}
-                    disabled={isActing}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium border border-red-200 text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
-                  >
-                    Delete
-                  </button>
+                  {(!event.paymentRequestTypes || event.paymentRequestTypes.length === 0) && (
+                    <button
+                      type="button"
+                      onClick={handleDelete}
+                      disabled={isActing}
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium border border-red-200 text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
+                    >
+                      Delete
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -402,14 +428,16 @@ export default function EventPage() {
                   <PaymentRequestDetails paymentRequest={paymentRequest} formatPaymentType={formatPaymentType} />
                   {paymentRequest && (
                     <div className="mt-4 flex gap-2">
-                      <button
-                        type="button"
-                        onClick={handleDeletePaymentRequest}
-                        disabled={isActing}
-                        className="px-4 py-2 rounded-lg text-sm font-medium border border-red-200 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
-                      >
-                        Delete {formatPaymentType(paymentRequest.type)} Payment
-                      </button>
+                      {paymentRequest?.recurringTemplate?.status === "active" ? (
+                        <button
+                          type="button"
+                          onClick={handleStopRecurring}
+                          disabled={isActing}
+                          className="px-4 py-2 rounded-lg text-sm font-medium border border-amber-200 text-amber-700 hover:bg-amber-50 transition-colors disabled:opacity-50"
+                        >
+                          Stop Recurring
+                        </button>
+                      ) : null}
                     </div>
                   )}
                 </div>

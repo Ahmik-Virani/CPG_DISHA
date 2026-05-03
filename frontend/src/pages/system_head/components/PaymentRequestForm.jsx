@@ -168,13 +168,19 @@ export default function PaymentRequestForm({
                     className="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-orange-600 transition-colors"
                     required
                   >
+                    <option value="minutes">Minutes</option>
                     <option value="days">Days</option>
                     <option value="months">Months</option>
                   </select>
                 </div>
               </div>
               <p className="text-xs text-gray-500">
-                Example: Every <strong>{paymentForm.intervalValue}</strong> {paymentForm.intervalUnit === "days" ? "day(s)" : "month(s)"}
+                Example: Every <strong>{paymentForm.intervalValue}</strong>{" "}
+                {paymentForm.intervalUnit === "minutes"
+                  ? "minute(s)"
+                  : paymentForm.intervalUnit === "days"
+                    ? "day(s)"
+                    : "month(s)"}
               </p>
             </div>
           )}

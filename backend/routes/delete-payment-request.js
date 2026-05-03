@@ -4,6 +4,7 @@ import {
   findOneTimePaymentRequestById,
   deleteFixedPaymentRequestById,
   deleteOneTimePaymentRequestById,
+  hasPaymentProcessedForRequest,
 } from "../db.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 
@@ -24,6 +25,11 @@ router.delete(
 
     if (paymentRequest.createdBySystemHeadId !== systemHeadId) {
       return res.status(403).json({ message: "Forbidden: Cannot delete payment request created by another system head" });
+    }
+
+    const hasPayments = await hasPaymentProcessedForRequest(paymentRequestId);
+    if (hasPayments) {
+      return res.status(409).json({ message: "Cannot delete a payment request that already has payment activity." });
     }
 
     const deleted = await deleteFixedPaymentRequestById(paymentRequestId);
@@ -51,6 +57,11 @@ router.delete(
 
     if (paymentRequest.createdBySystemHeadId !== systemHeadId) {
       return res.status(403).json({ message: "Forbidden: Cannot delete payment request created by another system head" });
+    }
+
+    const hasPayments = await hasPaymentProcessedForRequest(paymentRequestId);
+    if (hasPayments) {
+      return res.status(409).json({ message: "Cannot delete a payment request that already has payment activity." });
     }
 
     const deleted = await deleteOneTimePaymentRequestById(paymentRequestId);

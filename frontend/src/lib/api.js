@@ -75,6 +75,8 @@ export const eventApi = {
     apiRequest("/events", { method: "POST", body: JSON.stringify(data) }, token),
   markDone: (token, eventId) =>
     apiRequest("/events/" + eventId + "/complete", { method: "PATCH" }, token),
+  stopRecurring: (token, eventId) =>
+    apiRequest("/events/" + eventId + "/recurring/stop", { method: "PATCH" }, token),
   remove: (token, eventId) => apiRequest("/events/" + eventId, { method: "DELETE" }, token),
   createPaymentRequest: (token, eventId, data) =>
     apiRequest("/events/" + eventId + "/payment-requests", { method: "POST", body: JSON.stringify(data) }, token),

@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "node main.js",
-    "start": "node main.js"
+    "start": "node main.js",
+    "test": "node test/auth.middleware.test.js && node test/ownership.test.js && node test/initiate-sale.test.js && node test/verify-status.test.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

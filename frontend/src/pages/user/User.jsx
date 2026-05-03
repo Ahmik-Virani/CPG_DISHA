@@ -31,10 +31,9 @@ export default function User() {
   const pendingRequestsWithStatus = pendingRequests
     .map((request) => {
       const dueAt = new Date(request.timeToLive).getTime();
-      const isOverdue = Number.isFinite(dueAt) && dueAt < Date.now();
       return {
         ...request,
-        computedStatus: isOverdue ? "missed" : request.status,
+        computedStatus: "pending",
         dueAt,
       };
     })
@@ -207,7 +206,7 @@ export default function User() {
                 <div className="max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {pendingRequestsWithStatus.map((req) => {
                     const hoursLeft = (req.dueAt - Date.now()) / (1000 * 60 * 60);
-                    const isUrgent = req.computedStatus === "pending" && hoursLeft < 24;
+                    const isUrgent = req.computedStatus === "pending" && hoursLeft >= 0 && hoursLeft < 24;
                     const isSoon = req.computedStatus === "pending" && hoursLeft >= 24 && hoursLeft < 48;
 
                     return (
@@ -237,8 +236,6 @@ export default function User() {
                               className={`text-xs px-2.5 py-1 rounded-full font-medium capitalize ${
                                 req.computedStatus === "pending"
                                   ? "bg-orange-100 text-orange-700"
-                                  : req.computedStatus === "missed"
-                                  ? "bg-amber-100 text-amber-700"
                                   : "bg-green-100 text-green-700"
                               }`}
                             >

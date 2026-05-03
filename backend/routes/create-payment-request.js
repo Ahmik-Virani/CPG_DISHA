@@ -7,6 +7,7 @@ import {
   createFixedPaymentRequestRecord,
   createRecurringTemplateRecord,
   findLatestPaymentRequestByEventAndSystemHead,
+  findLatestRecurringTemplateByEventAndSystemHead,
   findUserById,
   listOneTimePaymentRequestsByBatchId,
   listBanks,
@@ -92,8 +93,15 @@ async function buildLatestPaymentRequestView(paymentRequest, systemHeadId) {
     return null;
   }
 
+  const recurringTemplate = paymentRequest.eventId
+    ? await findLatestRecurringTemplateByEventAndSystemHead(paymentRequest.eventId, systemHeadId)
+    : null;
+
   if (paymentRequest.type !== "one_time" || !paymentRequest.batchId) {
-    return paymentRequest;
+    return {
+      ...paymentRequest,
+      recurringTemplate: recurringTemplate || null,
+    };
   }
 
   const batchRequests = await listOneTimePaymentRequestsByBatchId(paymentRequest.batchId, systemHeadId);
@@ -103,6 +111,7 @@ async function buildLatestPaymentRequestView(paymentRequest, systemHeadId) {
       rollNo: request.rollNo,
       amount: request.amount,
     })),
+    recurringTemplate: recurringTemplate || null,
   };
 }
 
@@ -212,9 +221,9 @@ router.post(
           });
         }
 
-        if (!["days", "months"].includes(intervalUnit)) {
+        if (!["minutes", "days", "months"].includes(intervalUnit)) {
           return res.status(400).json({
-            message: "intervalUnit must be either 'days' or 'months' for recurring one-time payments",
+            message: "intervalUnit must be one of 'minutes', 'days', or 'months' for recurring one-time payments",
           });
         }
 
@@ -256,6 +265,7 @@ router.post(
             rollNo: request.rollNo,
             amount: request.amount,
           })),
+          recurringTemplate: recurringTemplate || null,
         },
         table: "One_Time_Payment_Request",
         recurringTemplate: recurringTemplate ? { id: recurringTemplate.id } : null,
@@ -299,7 +309,9 @@ router.post(
 
 function calculateNextExecutionDate(baseDate, value, unit) {
   const nextDate = new Date(baseDate);
-  if (unit === "days") {
+  if (unit === "minutes") {
+    nextDate.setMinutes(nextDate.getMinutes() + value);
+  } else if (unit === "days") {
     nextDate.setDate(nextDate.getDate() + value);
   } else if (unit === "months") {
     nextDate.setMonth(nextDate.getMonth() + value);

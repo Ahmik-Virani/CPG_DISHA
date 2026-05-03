@@ -8,6 +8,7 @@ export default function PaymentRequestDetails({ paymentRequest, formatPaymentTyp
     : paymentRequest.bank
       ? [paymentRequest.bank]
       : [];
+  const recurringTemplate = paymentRequest.recurringTemplate || null;
 
   return (
     <div className="mt-6 rounded-xl border border-gray-200 bg-gray-50 p-4">
@@ -30,6 +31,27 @@ export default function PaymentRequestDetails({ paymentRequest, formatPaymentTyp
             <p>
               <span className="font-medium">Rows:</span> {oneTimeEntries.length}
             </p>
+            {recurringTemplate ? (
+              <>
+                <p>
+                  <span className="font-medium">Recurring:</span>{" "}
+                  <span className={recurringTemplate.status === "active" ? "text-green-600" : "text-gray-500"}>
+                    {recurringTemplate.status === "active" ? "Active" : "Stopped"}
+                  </span>
+                </p>
+                <p>
+                  <span className="font-medium">Interval:</span> Every {recurringTemplate.intervalValue} {recurringTemplate.intervalUnit}
+                </p>
+                <p>
+                  <span className="font-medium">Next Execution:</span>{" "}
+                  {recurringTemplate.nextExecutionDate ? new Date(recurringTemplate.nextExecutionDate).toLocaleString() : "-"}
+                </p>
+                <p>
+                  <span className="font-medium">Last Generated:</span>{" "}
+                  {recurringTemplate.lastGeneratedAt ? new Date(recurringTemplate.lastGeneratedAt).toLocaleString() : "-"}
+                </p>
+              </>
+            ) : null}
             <div className="md:col-span-2 overflow-x-auto">
               <div className="max-h-105 overflow-y-auto rounded-lg border border-gray-200 bg-white">
                 <table className="min-w-full text-left text-sm">

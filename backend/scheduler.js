@@ -28,7 +28,9 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
  */
 function calculateNextExecutionDate(currentDate, intervalValue, intervalUnit) {
   const nextDate = new Date(currentDate);
-  if (intervalUnit === "days") {
+  if (intervalUnit === "minutes") {
+    nextDate.setMinutes(nextDate.getMinutes() + intervalValue);
+  } else if (intervalUnit === "days") {
     nextDate.setDate(nextDate.getDate() + intervalValue);
   } else if (intervalUnit === "months") {
     nextDate.setMonth(nextDate.getMonth() + intervalValue);
@@ -557,10 +559,10 @@ export async function runIciciSettlementSync() {
 
 /**
  * Start the recurring templates scheduler
- * Runs daily at midnight (Asia/Kolkata)
+ * Runs every minute (Asia/Kolkata) for local recurring-payment testing
  */
 export function startRecurringTemplatesScheduler() {
-  const task = cron.schedule("0 0 * * *", async () => {
+  const task = cron.schedule("* * * * *", async () => {
     const now = new Date().toISOString();
     console.log(`[Scheduler] Cron job triggered at ${now} - Starting recurring templates execution`);
     await executeRecurringTemplates();
@@ -572,6 +574,6 @@ export function startRecurringTemplatesScheduler() {
     timezone: "Asia/Kolkata",
   });
 
-  console.log("[Scheduler] Recurring templates scheduler started (Cron: 0 0 * * * - Daily at midnight)");
+  console.log("[Scheduler] Recurring templates scheduler started (Cron: * * * * * - Every minute)");
   return task;
 }
