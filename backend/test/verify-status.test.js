@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import test from "node:test";
 import express from "express";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { signToken } from "../utils.js";
@@ -29,15 +30,8 @@ async function post(baseUrl, path, { token, body } = {}) {
   return { response, body: json };
 }
 
-async function runCase(name, fn) {
-  try {
-    await fn();
-    console.log(`PASS ${name}`);
-  } catch (error) {
-    console.error(`FAIL ${name}`);
-    console.error(error);
-    process.exitCode = 1;
-  }
+function runCase(name, fn) {
+  test(name, fn);
 }
 
 // ─── mini app builder ────────────────────────────────────────────────────────
@@ -318,6 +312,3 @@ await runCase("marks payment as failed when ICICI returns a verified failed resp
   }
 });
 
-if (!process.exitCode) {
-  console.log("All verify-status tests passed.");
-}

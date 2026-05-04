@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import test from "node:test";
 import express from "express";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { signToken } from "../utils.js";
@@ -46,15 +47,8 @@ async function closeServer(server) {
   await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
 }
 
-async function runCase(name, fn) {
-  try {
-    await fn();
-    console.log(`PASS ${name}`);
-  } catch (error) {
-    console.error(`FAIL ${name}`);
-    console.error(error);
-    process.exitCode = 1;
-  }
+function runCase(name, fn) {
+  test(name, fn);
 }
 
 await runCase("protected route rejects missing token", async () => {
@@ -167,6 +161,3 @@ await runCase("admin token is accepted on admin-only route", async () => {
   }
 });
 
-if (!process.exitCode) {
-  console.log("All auth middleware tests passed.");
-}

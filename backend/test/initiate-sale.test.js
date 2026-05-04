@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import test from "node:test";
 import crypto from "node:crypto";
 import express from "express";
 import { requireAuth, requireRole } from "../middleware/auth.js";
@@ -31,15 +32,8 @@ async function post(baseUrl, path, { token, body } = {}) {
   return { response, body: json };
 }
 
-async function runCase(name, fn) {
-  try {
-    await fn();
-    console.log(`PASS ${name}`);
-  } catch (error) {
-    console.error(`FAIL ${name}`);
-    console.error(error);
-    process.exitCode = 1;
-  }
+function runCase(name, fn) {
+  test(name, fn);
 }
 
 // ─── mini app builder ────────────────────────────────────────────────────────
@@ -412,6 +406,3 @@ await runCase("allows eligible user to initiate variable amount payment with a v
   }
 });
 
-if (!process.exitCode) {
-  console.log("All initiate-sale tests passed.");
-}
