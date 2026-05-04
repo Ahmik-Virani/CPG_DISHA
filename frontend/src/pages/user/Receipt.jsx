@@ -70,6 +70,14 @@ export default function Receipt() {
         <div class="success-badge">
           <span>✓ PAYMENT SUCCESSFUL</span>
         </div>
+        ${receiptData.isDuplicatePayment || String(receiptData?.duplicateRefund?.reason || "") === "queued-for-refund" ? `
+        <div class="details" style="margin-bottom: 20px; border: 1px solid #f59e0b; background: #fffbeb;">
+          <div class="detail-row">
+            <span class="detail-label">Duplicate Payment</span>
+            <span class="detail-value" style="color: #b45309;">Queued for refund</span>
+          </div>
+        </div>
+        ` : ""}
         <div class="details">
           <div class="detail-row">
             <span class="detail-label">Event</span>

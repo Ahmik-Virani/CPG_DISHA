@@ -36,6 +36,18 @@ function TypeBadge({ type }) {
   );
 }
 
+function DuplicateBadge({ entry }) {
+  if (!entry?.isDuplicatePayment && String(entry?.duplicateRefund?.reason || "") !== "queued-for-refund") {
+    return null;
+  }
+
+  return (
+    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+      Duplicate
+    </span>
+  );
+}
+
 export default function SystemHead() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -295,6 +307,7 @@ export default function SystemHead() {
                         </div>
                         <div className="flex items-center gap-3 shrink-0 flex-wrap justify-end">
                           <TypeBadge type={txn.type} />
+                          <DuplicateBadge entry={txn} />
                           <span className="text-sm font-semibold text-gray-800">
                             ₹{Number(txn.transaction?.amount || 0).toLocaleString("en-IN")}
                           </span>

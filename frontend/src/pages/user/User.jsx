@@ -26,6 +26,9 @@ export default function User() {
   const [redirectVerifyLoading, setRedirectVerifyLoading] = useState(false);
   const [redirectVerifyMessage, setRedirectVerifyMessage] = useState("");
   const [redirectVerifyError, setRedirectVerifyError] = useState("");
+  const [statusCheckLoadingId, setStatusCheckLoadingId] = useState("");
+  const [statusCheckMessage, setStatusCheckMessage] = useState("");
+  const [statusCheckError, setStatusCheckError] = useState("");
   const hasRedirectedToReceipt = useRef(false);
 
   const pendingRequestsWithStatus = pendingRequests
@@ -42,6 +45,84 @@ export default function User() {
       const bSafe = Number.isFinite(b.dueAt) ? b.dueAt : Number.MAX_SAFE_INTEGER;
       return aSafe - bSafe;
     });
+
+  const isDuplicatePayment = (entry) =>
+    Boolean(entry?.isDuplicatePayment || String(entry?.duplicateRefund?.reason || "") === "queued-for-refund");
+
+  const getStatusCheckInfo = (entry) => {
+    const usage = entry?.statusCheckUsage || {};
+    const today = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(new Date());
+    const todayKey = `${today.find((part) => part.type === "year")?.value || "0000"}-${today.find((part) => part.type === "month")?.value || "01"}-${today.find((part) => part.type === "day")?.value || "01"}`;
+    const usageDateKey = String(usage.dateKey || "").trim();
+    const countToday = usageDateKey === todayKey ? Number(usage.count || 0) : 0;
+    return {
+      countToday,
+      remaining: Math.max(0, 2 - countToday),
+      disabled: countToday >= 2,
+    };
+  };
+
+  const isStatusCheckExpired = (entry) => {
+    if (String(entry?.status || "").toLowerCase() !== "failed") {
+      return false;
+    }
+
+    const failedAt = entry?.failedAt || entry?.statusCheckUsage?.failedAt || entry?.updatedAt || entry?.createdAt || null;
+    const parsedFailedAt = failedAt ? new Date(failedAt).getTime() : NaN;
+    if (!Number.isFinite(parsedFailedAt)) {
+      return false;
+    }
+
+    return Date.now() - parsedFailedAt > 2 * 24 * 60 * 60 * 1000;
+  };
+
+  const handleStatusCheck = async (entry) => {
+    if (!entry?.id || !token) return;
+
+    const checkInfo = getStatusCheckInfo(entry);
+    if (checkInfo.disabled) {
+      setStatusCheckError("Status check limit reached for today. Please try again tomorrow.");
+      return;
+    }
+
+    setStatusCheckLoadingId(entry.id);
+    setStatusCheckMessage("");
+    setStatusCheckError("");
+
+    try {
+      const data = await userPaymentApi.verifyStatus(token, {
+        paymentRecordId: entry.id,
+        paymentRequestId: entry.paymentRequestId,
+      });
+
+      const nextStatus = String(data?.status || "pending").toLowerCase();
+      const updatedRecord = data?.paymentRecord || null;
+      if (updatedRecord) {
+        setHistoryRequests((current) => current.map((item) => (String(item.id) === String(entry.id) ? { ...item, ...updatedRecord } : item)));
+      }
+
+      if (nextStatus === "success") {
+        setStatusCheckMessage("Payment successful. Opening receipt...");
+        navigate(`/user/receipt/${entry.id}`);
+        return;
+      }
+
+      if (nextStatus === "failed") {
+        setStatusCheckMessage("Payment is marked as failed.");
+      } else {
+        setStatusCheckMessage("Payment is still pending confirmation.");
+      }
+    } catch (error) {
+      setStatusCheckError(error.message || "Failed to verify payment status");
+    } finally {
+      setStatusCheckLoadingId("");
+    }
+  };
 
   useEffect(() => {
     if (activeTab !== "pending" || pendingRequests.length > 0) return;
@@ -315,6 +396,12 @@ export default function User() {
                   <p className="text-lg">No transaction history yet</p>
                 </div>
               )}
+              {!historyLoading && !historyError && statusCheckMessage && (
+                <p className="text-center text-green-600 text-sm mb-3">{statusCheckMessage}</p>
+              )}
+              {!historyLoading && !historyError && statusCheckError && (
+                <p className="text-center text-red-500 text-sm mb-3">{statusCheckError}</p>
+              )}
               {!historyLoading && !historyError && historyRequests.length > 0 && (
                 <div className="max-w-6xl mx-auto overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
                   <table className="min-w-full text-left text-sm">
@@ -325,6 +412,7 @@ export default function User() {
                         <th className="px-4 py-3">Bank</th>
                         <th className="px-4 py-3">Txn ID</th>
                         <th className="px-4 py-3">Status</th>
+                        <th className="px-4 py-3">Action</th>
                         <th className="px-4 py-3">Date</th>
                       </tr>
                     </thead>
@@ -361,6 +449,27 @@ export default function User() {
                               >
                                 {status}
                               </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              {(status === "pending" || status === "failed") && !isStatusCheckExpired(entry) ? (
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void handleStatusCheck(entry);
+                                  }}
+                                  disabled={statusCheckLoadingId === entry.id || getStatusCheckInfo(entry).disabled}
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-medium text-orange-700 hover:bg-orange-100 disabled:opacity-60"
+                                >
+                                  {statusCheckLoadingId === entry.id
+                                    ? "Checking..."
+                                    : getStatusCheckInfo(entry).disabled
+                                      ? "Checked 2/2"
+                                      : `Check Status (${getStatusCheckInfo(entry).remaining}/2 left)`}
+                                </button>
+                              ) : (
+                                <span className="text-xs text-gray-300">-</span>
+                              )}
                             </td>
                             <td className="px-4 py-3 text-gray-600">{entry.createdAt ? new Date(entry.createdAt).toLocaleString() : "-"}</td>
                           </tr>

@@ -66,6 +66,26 @@ function resolveRecordStatus(record) {
   return "pending";
 }
 
+function getIstDateKey(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === "year")?.value || "0000";
+  const month = parts.find((part) => part.type === "month")?.value || "01";
+  const day = parts.find((part) => part.type === "day")?.value || "01";
+  return `${year}-${month}-${day}`;
+}
+
+function isOlderThanDays(timestamp, days) {
+  if (!timestamp) return false;
+  const parsed = new Date(timestamp).getTime();
+  if (!Number.isFinite(parsed)) return false;
+  return Date.now() - parsed > days * 24 * 60 * 60 * 1000;
+}
+
 function buildUserHistoryView(records, requestContexts, events) {
   const contextByPaymentRequestId = new Map(
     requestContexts.map((context) => [String(context.paymentRequestId || "").trim(), context])
@@ -77,6 +97,14 @@ function buildUserHistoryView(records, requestContexts, events) {
     const context = contextByPaymentRequestId.get(paymentRequestId);
     const event = eventById.get(String(context?.eventId || "").trim());
 
+    const failedAt =
+      record?.statusCheckUsage?.failedAt ||
+      record?.reconciliation?.firstFailedAt ||
+      record?.transaction?.date ||
+      record?.updatedAt ||
+      record?.createdAt ||
+      null;
+
     return {
       id: record.id,
       paymentRequestId,
@@ -84,6 +112,11 @@ function buildUserHistoryView(records, requestContexts, events) {
       student: record.student || null,
       transaction: record.transaction || null,
       bank: record.bank || null,
+      alerts: Array.isArray(record.alerts) ? record.alerts : [],
+      duplicateRefund: record.duplicateRefund || null,
+      isDuplicatePayment: String(record?.duplicateRefund?.reason || "") === "queued-for-refund",
+      statusCheckUsage: record.statusCheckUsage || null,
+      failedAt,
       eventId: context?.eventId || null,
       eventName: event?.name || "Unknown Event",
       eventDescription: event?.description || "No event description available",
@@ -309,12 +342,58 @@ export function createVerifyUserPaymentStatusHandler({
       return res.status(403).json({ message: "You are not allowed to verify this payment" });
     }
 
-    if (String(paymentRecord.status || "").toLowerCase() === "success") {
+    const currentStatus = String(paymentRecord.status || "").toLowerCase();
+    if (currentStatus === "success") {
       return res.json({
         status: "success",
         paymentRecord,
         message: "Payment is already marked as success",
       });
+    }
+
+    if (currentStatus === "failed") {
+      const failedAt = paymentRecord?.statusCheckUsage?.failedAt || paymentRecord?.updatedAt || paymentRecord?.createdAt || null;
+      if (isOlderThanDays(failedAt, 2)) {
+        return res.status(410).json({
+          message: "Status check is no longer available for this failed payment.",
+          paymentRecord,
+        });
+      }
+    }
+
+    if (["pending", "failed"].includes(currentStatus)) {
+      const todayKey = getIstDateKey();
+      const existingUsage = paymentRecord?.statusCheckUsage || {};
+      const usageDateKey = String(existingUsage.dateKey || "").trim();
+      const usageCount = usageDateKey === todayKey ? Number(existingUsage.count || 0) : 0;
+
+      if (usageCount >= 2) {
+        return res.status(429).json({
+          message: "Status check limit reached for today. Please try again tomorrow.",
+          statusCheckUsage: {
+            dateKey: todayKey,
+            count: usageCount,
+            limit: 2,
+          },
+          paymentRecord,
+        });
+      }
+
+      const updatedUsage = {
+        dateKey: todayKey,
+        count: usageCount + 1,
+        lastCheckedAt: new Date().toISOString(),
+        failedAt: usageDateKey === todayKey && existingUsage.failedAt ? existingUsage.failedAt : (existingUsage.failedAt || null),
+      };
+
+      const updatedUsageRecord = await updatePaymentProcessedByIdOverride(paymentRecord.id, {
+        statusCheckUsage: updatedUsage,
+      });
+
+      paymentRecord = updatedUsageRecord || {
+        ...paymentRecord,
+        statusCheckUsage: updatedUsage,
+      };
     }
 
     const merchantTxnNo = String(paymentRecord?.transaction?.transaction_id || "").trim();
@@ -358,6 +437,12 @@ export function createVerifyUserPaymentStatusHandler({
       const updatedPaymentRecord = await updatePaymentProcessedByIdOverride(paymentRecord.id, {
         status: finalStatus,
         pendingHashVerificationRetry: verificationDecision.pendingHashVerificationRetry,
+        statusCheckUsage: finalStatus === "failed"
+          ? {
+              ...(paymentRecord.statusCheckUsage || {}),
+              failedAt: paymentRecord?.statusCheckUsage?.failedAt || paymentRecord?.updatedAt || new Date().toISOString(),
+            }
+          : paymentRecord.statusCheckUsage || null,
         transaction: {
           ...(paymentRecord.transaction || {}),
           status: dbStatusLabel,

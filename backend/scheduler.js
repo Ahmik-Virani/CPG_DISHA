@@ -14,10 +14,9 @@ import {
   listPaymentProcessedByPaymentRequestIds,
   findRefundByPaymentRecordId,
   createRefundRecord,
-  updateRefundRecordById,
 } from "./db.js";
 import { normalizeStoredPaymentStatus, resolveStatusAfterHashVerification } from "./payment-status.js";
-import { checkIciciSaleStatus, initiateIciciRefund } from "./routes/bank-payment/icici.js";
+import { checkIciciSaleStatus } from "./routes/bank-payment/icici.js";
 import { syncIciciSettlementHistoryForPreviousDay } from "./settlement.js";
 
 const MAX_PENDING_DAILY_RETRIES = 5;
@@ -128,6 +127,17 @@ async function processDuplicateRefundIfNeeded(paymentRecord, context) {
     amount: Number(amount.toFixed(2)),
     status: "initiated",
     trigger: "duplicate_successful_payment",
+    // include merchant and student details for the queued refund
+    merchant: {
+      merchantId: String(paymentRecord?.transaction?.merchant_id || paymentRecord?.gateway?.requestPacket?.merchantId || "").trim() || null,
+      merchantName: String(paymentRecord?.bank?.bank_name || paymentRecord?.gateway?.merchantName || "").trim() || null,
+    },
+    student: {
+      userId: paymentRecord?.student?.userId || null,
+      name: paymentRecord?.student?.name || null,
+      email: paymentRecord?.student?.email || null,
+      roll_no: paymentRecord?.student?.roll_no || null,
+    },
     requestPacket: null,
     responsePacket: null,
     responseCode: null,
@@ -139,41 +149,13 @@ async function processDuplicateRefundIfNeeded(paymentRecord, context) {
 
   await createRefundRecord(refundRecord);
 
-  try {
-    const refundResult = await initiateIciciRefund({
-      originalTxnNo,
-      amount,
-      addlParam1: `${eventId}|${rollNo}`.slice(0, 64),
-      addlParam2: String(paymentRecord.id || "").slice(0, 64),
-    });
-
-    const updatedRefund = await updateRefundRecordById(refundRecord.id, {
-      status: refundResult.status === "success" && refundResult.hashVerified ? "success" : "failed",
-      refundTxnNo: refundResult.merchantTxnNo || null,
-      requestPacket: refundResult.requestPacket || null,
-      responsePacket: refundResult.responsePacket || null,
-      responseCode: refundResult.responseCode || null,
-      respDescription: refundResult.respDescription || null,
-      hashVerified: refundResult.hashVerified,
-    });
-
-    return {
-      refunded: String(updatedRefund?.status || "") === "success",
-      reason: String(updatedRefund?.status || "") === "success" ? "refund-success" : "refund-failed",
-      refund: updatedRefund || refundRecord,
-    };
-  } catch (error) {
-    await updateRefundRecordById(refundRecord.id, {
-      status: "failed",
-      respDescription: String(error?.message || "Refund API call failed").slice(0, 250),
-    });
-
-    return {
-      refunded: false,
-      reason: "refund-api-error",
-      error: String(error?.message || error),
-    };
-  }
+  // NOTE: Per requested change, do not call any external refund API here.
+  // Instead we queue the refund by persisting the refund record and return a queued result.
+  return {
+    refunded: false,
+    reason: "queued-for-refund",
+    refund: refundRecord,
+  };
 }
 
 async function reconcileSinglePaymentRecord(paymentRecord, contextByPaymentRequestId) {
@@ -331,6 +313,19 @@ async function reconcileSinglePaymentRecord(paymentRecord, contextByPaymentReque
           id: crypto.randomUUID(),
           reason: "duplicate-refund-processed",
           message: "Duplicate payment detected. Refund initiated successfully.",
+          createdAt: new Date().toISOString(),
+          read: false,
+        },
+      ];
+    } else if (duplicateRefundResult.reason === "queued-for-refund" && duplicateRefundResult.refund) {
+      const refundId = String(duplicateRefundResult.refund.id || "");
+      const merchantTxn = String(duplicateRefundResult.refund.originalTxnNo || "");
+      alerts = [
+        ...alerts,
+        {
+          id: crypto.randomUUID(),
+          reason: "duplicate-payment-queued",
+          message: `Duplicate payment detected. Refund queued (refundId=${refundId}, txn=${merchantTxn}).`,
           createdAt: new Date().toISOString(),
           read: false,
         },

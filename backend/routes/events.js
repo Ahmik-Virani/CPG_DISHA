@@ -60,6 +60,9 @@ function buildSystemHeadHistory(records, requestContexts, events) {
       student: record.student || null,
       transaction: record.transaction || null,
       bank: record.bank || null,
+      alerts: Array.isArray(record.alerts) ? record.alerts : [],
+      duplicateRefund: record.duplicateRefund || null,
+      isDuplicatePayment: String(record?.duplicateRefund?.reason || "") === "queued-for-refund",
       createdAt: record.createdAt || null,
       updatedAt: record.updatedAt || null,
     };
