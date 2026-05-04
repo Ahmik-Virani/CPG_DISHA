@@ -301,7 +301,7 @@ export async function checkIciciSaleStatus({
   const normalizedMerchantTxnNo = String(merchantTxnNo || "").trim();
 
   const packetWithoutHash = {
-    merchantId,
+    merchantID: merchantId,
     aggregatorID,
     transactionType: "STATUS",
   };
@@ -330,26 +330,38 @@ export async function checkIciciSaleStatus({
     secureHash,
   };
 
-  console.log("[ICICI statusCheck] requestPacket:\n" + JSON.stringify(requestPacket, null, 2));
+  const body = new URLSearchParams();
+  Object.entries(requestPacket).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      body.append(key, String(value));
+    }
+  });
+
+  console.log("\n=== ICICI STATUS CHECK API DEBUG LOG ===");
+  console.log(`Command / Endpoint URL: POST ${ICICI_STATUS_CHECK_URL}`);
+  console.log(`Request Headers: {"Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json, text/plain, */*"}`);
+  console.log(`Raw Request Body (x-www-form-urlencoded):\n${body.toString()}`);
+  console.log(`Parsed Request Packet:\n${JSON.stringify(requestPacket, null, 2)}`);
 
   const statusCheckResponse = await fetch(ICICI_STATUS_CHECK_URL, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded",
+      Accept: "application/json, text/plain, */*",
     },
-    body: JSON.stringify(requestPacket),
+    body: body.toString(),
   });
 
   const rawResponse = await statusCheckResponse.text();
+  console.log(`Raw Response Body:\n${rawResponse}`);
+  console.log("========================================\n");
+
   let responsePacket = {};
   try {
     responsePacket = rawResponse ? JSON.parse(rawResponse) : {};
   } catch {
     responsePacket = Object.fromEntries(new URLSearchParams(rawResponse));
   }
-
-  console.log("[ICICI statusCheck] responsePacket:\n" + JSON.stringify(responsePacket, null, 2));
 
   if (!statusCheckResponse.ok) {
     throw buildHttpError(502, "Failed to check status with ICICI", {

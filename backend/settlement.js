@@ -201,6 +201,12 @@ async function callSettlementCommand(packetWithoutHash) {
     }
   });
 
+  console.log("\n=== ICICI SETTLEMENT API DEBUG LOG ===");
+  console.log(`Command / Endpoint URL: POST ${ICICI_SETTLEMENT_URL}`);
+  console.log(`Request Headers: {"Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json, text/plain, */*"}`);
+  console.log(`Raw Request Body (x-www-form-urlencoded):\n${body.toString()}`);
+  console.log(`Parsed Request Packet:\n${JSON.stringify(requestPacket, null, 2)}`);
+
   const response = await fetch(ICICI_SETTLEMENT_URL, {
     method: "POST",
     headers: {
@@ -211,6 +217,9 @@ async function callSettlementCommand(packetWithoutHash) {
   });
 
   const rawResponse = await response.text();
+  console.log(`Raw Response Body:\n${rawResponse}`);
+  console.log("=======================================\n");
+
   const responsePacket = parseApiResponse(rawResponse);
 
   if (!response.ok) {
@@ -398,7 +407,7 @@ async function syncByDateFallback(settlementDate, summaryErrorMessage = "") {
     bankName: "ICICI",
     settlementDate,
     updateFields: {
-      status: settledCount > 0 ? "partial" : "failed",
+      status: checkedCount === 0 ? "success" : (settledCount > 0 ? "partial" : "failed"),
       source: "status_fallback",
       totalSettledAmount,
       transactionCount: settledCount,
