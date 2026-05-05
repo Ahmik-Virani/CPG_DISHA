@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { findBankByDisplayName } from "../../db.js";
 import {
   ICICI_HMAC_SECRET,
+  ICICI_HMAC_SECRET_RESPONSE,
   ICICI_HMAC_ALGO,
   ICICI_INITIATE_SALE_URL,
   ICICI_AUTH_REDIRECT_URL,
@@ -86,6 +87,21 @@ function buildSecureHashFromConcatenatedValues(concatenatedValues) {
     .update(concatenatedValues)
     .digest("hex");
 }
+
+function buildSecureHashForResponse(concatenatedValues) {
+  const hashAlgorithm = (ICICI_HMAC_ALGO || "sha256").toLowerCase();
+  if (!crypto.getHashes().includes(hashAlgorithm)) {
+    throw buildHttpError(500, "ICICI_HMAC_ALGO is invalid", { hashAlgorithm });
+  }
+
+  const secret = (typeof ICICI_HMAC_SECRET_RESPONSE === 'string' && ICICI_HMAC_SECRET_RESPONSE) ? ICICI_HMAC_SECRET_RESPONSE : ICICI_HMAC_SECRET;
+
+  return crypto
+    .createHmac(hashAlgorithm, secret)
+    .update(concatenatedValues)
+    .digest("hex");
+}
+
 
 function findTranCtx(payload) {
   if (!payload || typeof payload !== "object") {
@@ -498,17 +514,17 @@ function verifyResponseSecureHash(responsePacket) {
   // ICICI V1: sort keys alphabetically (case-sensitive), concatenate non-null values
   const sortedKeys = Object.keys(rest).sort();
   const sortedValues = sortedKeys.map((k) => String(rest[k] ?? "")).join("");
-  const hashSorted = buildSecureHashFromConcatenatedValues(sortedValues);
+  const hashSorted = buildSecureHashForResponse(sortedValues);
 
   // Fallback: sorted, also skip boolean false / empty string values
-  const hashSortedSkipFalsy = buildSecureHashFromConcatenatedValues(
+  const hashSortedSkipFalsy = buildSecureHashForResponse(
     sortedKeys.filter((k) => rest[k] !== null && rest[k] !== "" && rest[k] !== false && rest[k] !== undefined)
       .map((k) => String(rest[k])).join("")
   );
 
   // Fallback: JSON insertion order (in case ICICI uses response order)
   const insertionValues = Object.values(rest).map((v) => String(v ?? "")).join("");
-  const hashInsertion = buildSecureHashFromConcatenatedValues(insertionValues);
+  const hashInsertion = buildSecureHashForResponse(insertionValues);
 
   console.log(`[ICICI hashVerify] received     = ${receivedHash}`);
   console.log(`[ICICI hashVerify] hash (sorted)= ${hashSorted}  match=${hashSorted === receivedHash}`);
