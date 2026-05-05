@@ -1,0 +1,1869 @@
+\documentclass[12pt,a4paper]{article}
+\UseRawInputEncoding
+% \usepackage[utf8]{inputenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{fancyhdr}
+\usepackage{graphicx}
+\usepackage{longtable}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{tocloft}
+\usepackage{array}
+\usepackage{booktabs}
+
+% Code formatting
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  keywordstyle=\color{blue},
+  commentstyle=\color{gray},
+  stringstyle=\color{red},
+  backgroundcolor=\color{lightgray!20},
+  frame=tb,
+  rulecolor=\color{black!30},
+  numbers=left,
+  numberstyle=\tiny,
+  stepnumber=1,
+  tabsize=2,
+  language=Java
+}
+
+% Page style
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{CPG\_DISHA SRS v1.0}
+\lhead{Software Requirements Specification}
+\cfoot{\thepage}
+
+\title{
+  \textbf{CPG\_DISHA} \\[1ex]
+  \large Software Requirements Specification (SRS) \\[0.5ex]
+  \normalsize Version 1.0 \\[1ex]
+  Document Generated: May 4, 2026
+}
+\author{Auto-generated from codebase analysis}
+\date{}
+
+\begin{document}
+
+% Cover page
+\maketitle
+\thispagestyle{empty}
+\vfill
+\begin{center}
+  \textbf{CONFIDENTIAL} \\[2ex]
+  This document contains detailed technical specifications for the CPG\_DISHA payment management system.
+\end{center}
+\newpage
+
+% Table of Contents
+\tableofcontents
+\newpage
+
+% ============================================================================
+\section{Executive Summary}
+% ============================================================================
+CPG\_DISHA is a comprehensive event-based payment collection and management system designed for institutions to efficiently manage student payments through multiple bank integrations. The system orchestrates complex payment workflows including payment request creation, multi-bank payment processing, automatic reconciliation, refund handling, and settlement tracking.
+
+\subsection{Key Capabilities}
+\begin{itemize}
+  \item \textbf{Event Management}: System heads create events and define payment collection requirements.
+  \item \textbf{Flexible Payment Requests}: Support for fixed-amount, variable-amount, and recurring payments.
+  \item \textbf{ICICI Bank Integration}: Full lifecycle payment processing (initiation, status verification, refunds, settlements).
+  \item \textbf{Automatic Reconciliation}: Daily scheduled reconciliation of pending/failed payments with ICICI.
+  \item \textbf{Duplicate Detection}: Duplicate payments are queued as refund records in the `Refunds` collection for manual or asynchronous processing; the system does not call external refund APIs automatically.\
+  \item \textbf{Duplicate Indicators}: Queued duplicate payments are surfaced in system-head and admin transaction history views and flagged in user receipts to aid reconciliation and merchant review.
+  \item \textbf{External Payment Links}: Public payment links for non-registered users.
+  \item \textbf{Role-Based Access Control}: Three-tier permission model (admin, system\_head, user).
+  \item \textbf{Settlement Tracking}: Daily ICICI settlement history synchronization and reporting.
+\end{itemize}
+
+% ============================================================================
+\section{Introduction and Background}
+% ============================================================================
+
+\subsection{Purpose}
+This SRS document provides comprehensive functional and technical specifications for the CPG\_DISHA system, serving as the reference for developers, QA, deployment teams, and stakeholders.
+
+\subsection{Scope}
+The system encompasses:
+\begin{itemize}
+  \item Full backend payment processing API (Express.js + Node.js)
+  \item Frontend user interfaces for three roles (admin, system\_head, user)
+  \item ICICI bank gateway integration
+  \item Automated daily scheduler for reconciliation and recurring tasks
+  \item MongoDB data persistence
+\end{itemize}
+
+\subsection{Technology Stack}
+\begin{itemize}
+  \item \textbf{Backend}: Node.js with Express.js framework
+  \item \textbf{Frontend}: React with Vite build system
+  \item \textbf{Database}: MongoDB
+  \item \textbf{Authentication}: JWT (JSON Web Tokens) with 15-minute expiry
+  \item \textbf{Cryptography}: HMAC-SHA256 for bank communication
+  \item \textbf{Scheduling}: Node-cron for daily automation
+\end{itemize}
+
+% ============================================================================
+\section{System Architecture Overview}
+% ============================================================================
+
+\subsection{High-Level Architecture}
+The system follows a three-tier architecture:
+\begin{enumerate}
+  \item \textbf{Presentation Layer}: React frontend with Vite, role-based routing
+  \item \textbf{Business Logic Layer}: Express.js backend with middleware, route handlers
+  \item \textbf{Data Layer}: MongoDB collections with proper indexing
+\end{enumerate}
+
+\subsection{Deployment Structure}
+\begin{lstlisting}
+CPG_DISHA/
+├── backend/              # Express.js server
+│   ├── config.js        # Configuration loading (env vars)
+│   ├── db.js            # MongoDB connection & accessors
+│   ├── main.js          # Server entry point
+│   ├── utils.js         # Utility functions (JWT, normalization)
+│   ├── scheduler.js     # Cron jobs & reconciliation
+│   ├── settlement.js    # ICICI settlement sync
+│   ├── middleware/
+│   │   └── auth.js      # JWT middleware
+│   └── routes/
+│       ├── auth.js      # Login, signup, password change
+│       ├── events.js    # Event CRUD & history
+│       ├── create-payment-request.js
+│       ├── delete-payment-request.js
+│       ├── user-payments.js
+│       ├── external-links.js
+│       ├── admin.js
+│       ├── health.js
+│       └── bank-payment/
+│           └── icici.js # ICICI integration
+└── frontend/            # React application
+    └── src/
+        ├── main.jsx     # React DOM mount
+        ├── App.jsx      # Route definitions
+        ├── context/
+        │   └── AuthContext.jsx
+        ├── lib/
+        │   └── api.js   # API wrapper
+        └── pages/
+            ├── login/   # Auth pages
+            ├── user/    # User payment pages
+            ├── system_head/  # Event management
+            └── admin/   # Admin controls
+\end{lstlisting}
+
+% ============================================================================
+\section{Functional Requirements}
+% ============================================================================
+
+\subsection{Authentication and User Management}
+
+\subsubsection{FR-AUTH-001: User Login}
+\begin{itemize}
+  \item Users submit email and password
+  \item System verifies against bcrypt hashed passwords (SALT\_ROUNDS=10)
+  \item Upon success: returns JWT token + user object (minus password)
+  \item Token valid for 15 minutes
+  \item Endpoint: POST /auth/login
+  \item File: backend/routes/auth.js
+\end{itemize}
+
+\subsubsection{FR-AUTH-002: User Signup}
+\begin{itemize}
+  \item Self-signup available for `user` role only (config: SELF\_SIGNUP\_ROLES)
+  \item Required fields: name, email, password (min 8 chars), roll\_no (for users)
+  \item Email validation: normalized to lowercase
+  \item Roll number validation: uppercase, whitespace stripped
+  \item Password hashing: bcrypt with SALT\_ROUNDS=10
+  \item Duplicate email check: MongoDB unique index on email
+  \item Endpoint: POST /auth/signup
+  \item File: backend/routes/auth.js
+\end{itemize}
+
+\subsubsection{FR-AUTH-003: Password Change}
+\begin{itemize}
+  \item Requires valid JWT token
+  \item Old password verified via bcrypt.compare
+  \item New password min 8 characters
+  \item Updates passwordHash and mustChangePassword flag
+  \item Endpoint: POST /auth/change-password
+  \item File: backend/routes/auth.js
+\end{itemize}
+
+\subsubsection{FR-AUTH-004: Get Current User}
+\begin{itemize}
+  \item Retrieves authenticated user details
+  \item Password hash excluded from response
+  \item Endpoint: GET /auth/me
+  \item File: backend/routes/auth.js
+\end{itemize}
+
+\subsection{Event Management}
+
+\subsubsection{FR-EVENT-001: Create Event}
+\begin{itemize}
+  \item Only `system\_head` role can create
+  \item Required: event name, description
+  \item Auto-generated: event ID (UUID), createdAt timestamp, isOngoing=true
+  \item Stores: createdBySystemHeadId, createdBySystemHeadName
+  \item Endpoint: POST /events
+  \item File: backend/routes/events.js
+  \item Security: requireAuth + requireRole('system\_head')
+\end{itemize}
+
+\subsubsection{FR-EVENT-002: List Events}
+\begin{itemize}
+  \item Returns all events for authenticated system\_head
+  \item Enriches with payment request types (fixed, one\_time) for each event
+  \item Endpoint: GET /events
+  \item File: backend/routes/events.js
+\end{itemize}
+
+\subsubsection{FR-EVENT-003: Get Event Detail}
+\begin{itemize}
+  \item System head can only view own events (ownership check)
+  \item Endpoint: GET /events/:eventId
+  \item File: backend/routes/events.js
+\end{itemize}
+
+\subsubsection{FR-EVENT-004: Mark Event Complete}
+\begin{itemize}
+  \item Toggles isOngoing to false
+  \item System head can only mark own events
+  \item Endpoint: PATCH /events/:eventId/complete
+  \item File: backend/routes/events.js
+\end{itemize}
+
+\subsubsection{FR-EVENT-005: Delete Event}
+\begin{itemize}
+  \item Cascade delete: removes all related payment requests and recurring templates
+  \item Logs deleted template IDs and counts
+  \item Endpoint: DELETE /events/:eventId
+  \item File: backend/routes/events.js
+  \item Security: ownership check enforced
+\end{itemize}
+
+\subsection{Payment Request Management}
+
+\subsubsection{FR-PAYMENT-001: Create One-Time Payment Request}
+\begin{itemize}
+  \item Type: one\_time
+  \item Batch structure: multiple rollNo/amount entries
+  \item Required: at least one valid entry, timeToLive (ISO date)
+  \item Validation: no duplicate roll numbers within batch
+  \item Bank selection: validates against enabled banks
+  \item Output: creates Payment\_Request records, returns batch view
+  \item Endpoint: POST /events/:eventId/payment-requests (type=one\_time)
+  \item File: backend/routes/create-payment-request.js
+\end{itemize}
+
+\subsubsection{FR-PAYMENT-002: Create Recurring One-Time Payments}
+\begin{itemize}
+  \item Optional flag: isRecurring=true on one-time creation
+  \item Required: intervalValue (positive number), intervalUnit (days|months)
+  \item Creates Recurring\_Templates record with nextExecutionDate
+  \item Template status: active
+  \item Stored for daily scheduler execution
+  \item Endpoint: POST /events/:eventId/payment-requests (isRecurring=true)
+  \item File: backend/routes/create-payment-request.js
+\end{itemize}
+
+\subsubsection{FR-PAYMENT-003: Create Fixed Payment Request}
+\begin{itemize}
+  \item Type: fixed
+  \item isAmountFixed flag: if true, amount required and must be > 0
+  \item if false: amount submitted later by user (variable)
+  \item Single record per request (not batched)
+  \item Endpoint: POST /events/:eventId/payment-requests (type=fixed)
+  \item File: backend/routes/create-payment-request.js
+\end{itemize}
+
+\subsubsection{FR-PAYMENT-004: Get Latest Payment Request}
+\begin{itemize}
+  \item Returns most recent payment request for event
+  \item For one-time: reconstructs entries from batch
+  \item Endpoint: GET /events/:eventId/payment-requests/latest
+  \item File: backend/routes/create-payment-request.js
+\end{itemize}
+
+\subsubsection{FR-PAYMENT-005: Delete Fixed Payment Request}
+\begin{itemize}
+  \item Only system\_head who created can delete
+  \item Endpoint: DELETE /events/fixed-payment-requests/:paymentRequestId
+  \item File: backend/routes/delete-payment-request.js
+\end{itemize}
+
+\subsubsection{FR-PAYMENT-006: Delete One-Time Payment Request}
+\begin{itemize}
+  \item Ownership check: must be created by same system\_head
+  \item Endpoint: DELETE /events/one-time-payment-requests/:paymentRequestId
+  \item File: backend/routes/delete-payment-request.js
+\end{itemize}
+
+\subsection{User Payment Processing}
+
+\subsubsection{FR-USER-PAYMENT-001: Get Pending Payments}
+\begin{itemize}
+  \item Lists one-time requests for user's roll number
+  \item Filters by status != 'success'
+  \item Enriches with event name and description
+  \item Endpoint: GET /user-payments/pending
+  \item File: backend/routes/user-payments.js
+  \item Security: user role only
+\end{itemize}
+
+\subsubsection{FR-USER-PAYMENT-002: Get Optional Payments}
+\begin{itemize}
+  \item Lists all fixed payment requests (across events)
+  \item Endpoint: GET /user-payments/optional
+  \item File: backend/routes/user-payments.js
+\end{itemize}
+
+\subsubsection{FR-USER-PAYMENT-003: Get Payment History}
+\begin{itemize}
+  \item Returns Payment\_Processed records for user
+  \item Enriches with event and request context
+  \item Sorted by createdAt (newest first)
+  \item Endpoint: GET /user-payments/history
+  \item File: backend/routes/user-payments.js
+\end{itemize}
+
+\subsubsection{FR-USER-PAYMENT-004: Initiate Payment Sale}
+\begin{itemize}
+  \item User selects payment request and bank
+  \item For variable payments: custom amount required
+  \item Calls ICICI initiateIciciSale
+  \item Creates Payment\_Processed record with status='pending'
+  \item Returns paymentURL for bank redirect
+  \item Endpoint: POST /user-payments/initiate-sale
+  \item File: backend/routes/user-payments.js
+\end{itemize}
+
+\subsubsection{FR-USER-PAYMENT-005: Verify Payment Status}
+\begin{itemize}
+  \item User polls for payment completion
+  \item Calls checkIciciSaleStatus with merchantTxnNo/tranCtx
+  \item Updates Payment\_Processed with ICICI response
+  \item Updates PaymentRequest status to success/failed
+  \item Provides a user-triggered status-check action ("Check Status") which can be pressed at most 2 times per IST day; failed payments older than 2 days are not eligible for further checks
+  \item Endpoint: POST /user-payments/verify-status
+  \item File: backend/routes/user-payments.js
+\end{itemize}
+
+\subsection{External Payment Links}
+
+\subsubsection{FR-EXTERNAL-001: Get or Create Link}
+\begin{itemize}
+  \item One link per system\_head (unique constraint)
+  \item Auto-creates if not exists
+  \item Tracks: linkId, status, usageCount, lastUsedAt
+  \item Endpoint: POST /external-links/me
+  \item File: backend/routes/external-links.js
+  \item Security: system\_head role
+\end{itemize}
+
+\subsubsection{FR-EXTERNAL-002: Generate Payment URL}
+\begin{itemize}
+  \item Takes amount parameter
+  \item Builds path: /pay/external/:linkId?amount=X.XX
+  \item Endpoint: POST /external-links/me/payment-url
+  \item File: backend/routes/external-links.js
+\end{itemize}
+
+\subsubsection{FR-EXTERNAL-003: Resolve External Link (Public)}
+\begin{itemize}
+  \item No authentication required
+  \item Validates: link exists, active status, amount > 0
+  \item Returns: linkId, amount, systemHead info, enabled banks
+  \item Endpoint: GET /external-links/:linkId/resolve?amount=X.XX
+  \item File: backend/routes/external-links.js
+\end{itemize}
+
+\subsubsection{FR-EXTERNAL-004: Initiate External Payment (Public)}
+\begin{itemize}
+  \item No authentication required
+  \item Validates: email, bank, returnURL
+  \item Creates Payment\_Processed with source='external\_link'
+  \item Increments external link usageCount
+  \item Endpoint: POST /external-links/:linkId/initiate
+  \item File: backend/routes/external-links.js
+\end{itemize}
+
+\subsubsection{FR-EXTERNAL-005: Get External Receipt (Public)}
+\begin{itemize}
+  \item Only accessible if payment status='success'
+  \item Returns formatted receipt with system head info
+  \item Endpoint: GET /external-links/receipt/:paymentRecordId
+  \item File: backend/routes/external-links.js
+\end{itemize}
+
+\subsubsection{FR-EXTERNAL-006: Verify External Payment Status (Public)}
+\begin{itemize}
+  \item Accepts: paymentRecordId OR merchantTxnNo OR tranCtx
+  \item Calls checkIciciSaleStatus
+  \item Updates Payment\_Processed record
+  \item Endpoint: POST /external-links/verify-status
+  \item File: backend/routes/external-links.js
+\end{itemize}
+
+\subsubsection{FR-EXTERNAL-007: Toggle External Link Status}
+\begin{itemize}
+  \item System head can enable/disable their link
+  \item Endpoint: PATCH /external-links/:linkId/status
+  \item File: backend/routes/external-links.js
+  \item Security: ownership check
+\end{itemize}
+
+\subsection{Admin Functions}
+
+\subsubsection{FR-ADMIN-001: List System Heads}
+\begin{itemize}
+  \item Returns all users with role='system\_head'
+  \item Excludes password hash
+  \item Endpoint: GET /admin/system-heads
+  \item File: backend/routes/admin.js
+  \item Security: admin role only
+\end{itemize}
+
+\subsubsection{FR-ADMIN-002: Create System Head}
+\begin{itemize}
+  \item Admin creates merchant/system-head account
+  \item Required: name, email, password (min 8 chars)
+  \item Auto-sets: mustChangePassword=true
+  \item Hashes password with bcrypt (SALT\_ROUNDS=10)
+  \item Endpoint: POST /admin/system-heads
+  \item File: backend/routes/admin.js
+\end{itemize}
+
+\subsubsection{FR-ADMIN-003: List Banks}
+\begin{itemize}
+  \item Returns all configured banks with fields
+  \item Endpoint: GET /admin/banks
+  \item File: backend/routes/admin.js
+\end{itemize}
+
+\subsubsection{FR-ADMIN-004: Create Bank}
+\begin{itemize}
+  \item Required: fields array with name field
+  \item Fields: key-value pairs (unique keys)
+  \item Stores: displayName (derived from name field), normalizedDisplayName (lowercase)
+  \item Endpoint: POST /admin/banks
+  \item File: backend/routes/admin.js
+\end{itemize}
+
+\subsubsection{FR-ADMIN-005: Update Bank}
+\begin{itemize}
+  \item Modifies bank configuration and fields
+  \item Revalidates name field requirement
+  \item Endpoint: PATCH /admin/banks/:bankId
+  \item File: backend/routes/admin.js
+\end{itemize}
+
+\subsubsection{FR-ADMIN-006: Toggle Bank Status}
+\begin{itemize}
+  \item Enable/disable bank for payments
+  \item Endpoint: PATCH /admin/banks/:bankId/status
+  \item File: backend/routes/admin.js
+\end{itemize}
+
+\subsubsection{FR-ADMIN-007: Delete Bank}
+\begin{itemize}
+  \item Removes bank configuration
+  \item Endpoint: DELETE /admin/banks/:bankId
+  \item File: backend/routes/admin.js
+\end{itemize}
+
+\subsubsection{FR-ADMIN-008: Get System Head Payment History}
+\begin{itemize}
+  \item Lists all Payment\_Processed records for a system\_head
+  \item Optional event filter
+  \item Includes internal and external payments
+  \item Endpoint: GET /admin/system-heads/:systemHeadId/payment-history
+  \item File: backend/routes/admin.js
+\end{itemize}
+
+\subsubsection{FR-ADMIN-009: Get ICICI Settlement History}
+\begin{itemize}
+  \item Returns latest settlement records (limit parameter)
+  \item Endpoint: GET /admin/settlements/icici
+  \item File: backend/routes/admin.js
+\end{itemize}
+
+\subsubsection{FR-ADMIN-010: Trigger Settlement Sync}
+\begin{itemize}
+  \item Admin can manually sync for specific date (YYYYMMDD format)
+  \item Returns sync result with mode (summary|status\_fallback)
+  \item Endpoint: POST /admin/settlements/icici/sync
+  \item File: backend/routes/admin.js
+\end{itemize}
+
+\subsection{Transaction History and Reporting}
+
+\subsubsection{FR-HISTORY-001: System Head Transaction History}
+\begin{itemize}
+  \item GET /events/transactions/history
+  \item Optional eventId filter
+  \item Returns both internal and external payments
+  \item Enriched with event context
+  \item File: backend/routes/events.js
+\end{itemize}
+
+% ============================================================================
+\section{Non-Functional Requirements}
+% ============================================================================
+
+\subsection{Performance Requirements}
+
+\subsubsection{NFR-PERF-001: Response Time}
+\begin{itemize}
+  \item API endpoints: < 500ms for reads, < 1000ms for writes (excluding external calls)
+  \item ICICI calls may take 2-5 seconds depending on gateway latency
+\end{itemize}
+
+\subsubsection{NFR-PERF-002: Scalability}
+\begin{itemize}
+  \item Database indexes on critical fields (eventId, createdBySystemHeadId, status, payment request IDs)
+  \item Pagination support via limit/offset in list operations
+  \item Scheduler runs non-blocking async operations
+\end{itemize}
+
+\subsubsection{NFR-PERF-003: Concurrency}
+\begin{itemize}
+  \item Multiple simultaneous payment initiation supported
+  \item Race condition prevention: unique indexes on critical IDs
+  \item Timestamp-based conflict detection in reconciliation
+\end{itemize}
+
+\subsection{Security Requirements}
+
+\subsubsection{NFR-SEC-001: Authentication}
+\begin{itemize}
+  \item JWT with 15-minute expiry
+  \item Token claims: sub (user ID), role, email
+  \item All protected routes require valid token via Authorization header (Bearer scheme)
+  \item File: backend/middleware/auth.js
+\end{itemize}
+
+\subsubsection{NFR-SEC-002: Authorization}
+\begin{itemize}
+  \item Role-based access control: admin, system\_head, user
+  \item RBAC enforced via requireRole middleware
+  \item Data isolation: system\_heads only see own events/payments/links
+  \item Users only see payments for their roll number
+\end{itemize}
+
+\subsubsection{NFR-SEC-003: Password Security}
+\begin{itemize}
+  \item Minimum 8 characters
+  \item Bcrypt hashing with SALT\_ROUNDS=10
+  \item Passwords never stored in plaintext
+  \item Password hash never returned in API responses
+\end{itemize}
+
+\subsubsection{NFR-SEC-004: Data Validation}
+\begin{itemize}
+  \item Email normalization: lowercase, trim
+  \item Roll number normalization: uppercase, whitespace stripped
+  \item Amount validation: must be finite positive number
+  \item Date validation: ISO format parsing
+  \item Enum validation: roles, statuses, transaction types
+  \item Max length checks on text fields
+\end{itemize}
+
+\subsubsection{NFR-SEC-005: ICICI Communication Security}
+\begin{itemize}
+  \item HMAC-SHA256 secure hash verification (sorted keys concatenated)
+  \item Support for separate HMAC secrets for requests and responses: `ICICI_HMAC_SECRET` is used for outgoing request signing; when present `ICICI_HMAC_SECRET_RESPONSE` is used to verify incoming responses (falls back to `ICICI_HMAC_SECRET` if not set)
+  \item Request and response packet integrity verified
+  \item Hash mismatch handling: logs detailed diagnostics
+  \item Fallback hash verification using multiple strategies (sorted, insertion order, skip falsy)
+  \item File: backend/routes/bank-payment/icici.js
+\end{itemize}
+
+\subsubsection{NFR-SEC-006: Sensitive Data Protection}
+\begin{itemize}
+  \item Passwords: bcrypt hashed, never logged
+  \item ICICI merchant credentials: stored in Banks collection, accessed via field lookups
+  \item JWT secret: environment variable, not committed to repo
+  \item HMAC secret: environment variable (ICICI\_HMAC\_SECRET)
+  \item Request/response packets: logged for debugging (in production, consider PII masking)
+\end{itemize}
+
+\subsubsection{NFR-SEC-007: CORS and Headers}
+\begin{itemize}
+  \item CORS enabled: accepts requests from frontend origin
+  \item Content-Type: application/json for API responses
+  \item No sensitive headers exposed
+\end{itemize}
+
+\subsection{Reliability and Availability}
+
+\subsubsection{NFR-REL-001: Database Connection}
+\begin{itemize}
+  \item Automatic retry with exponential backoff (max 30 seconds)
+  \item Connection timeout: 10 seconds
+  \item Server selection timeout: 10 seconds
+  \item Graceful degradation: returns 503 if database unavailable
+  \item File: backend/db.js (connectMongoWithRetry)
+\end{itemize}
+
+\subsubsection{NFR-REL-002: Error Handling}
+\begin{itemize}
+  \item Global error handler: all exceptions caught and logged
+  \item HTTP status codes: 4xx for client errors, 5xx for server errors
+  \item Error messages: descriptive without exposing internals
+  \item Logging: console.log for important events (can be enhanced with structured logging)
+\end{itemize}
+
+\subsubsection{NFR-REL-003: Scheduler Robustness}
+\begin{itemize}
+  \item Cron job: 0 0 * * * (daily at midnight IST)
+  \item Error handling: wrapped in try-catch, errors logged
+  \item Partial failures: scheduler continues if one task fails
+  \item File: backend/scheduler.js
+\end{itemize}
+
+\subsection{Maintainability}
+
+\subsubsection{NFR-MAINT-001: Code Organization}
+\begin{itemize}
+  \item Separation of concerns: routes, db, utils, middleware
+  \item Modular route handlers per feature
+  \item Centralized database accessor functions
+\end{itemize}
+
+\subsubsection{NFR-MAINT-002: Logging}
+\begin{itemize}
+  \item Console.log statements for events: payment creation, reconciliation, refunds
+  \item Timestamps included in logged messages
+  \item Request/response logging for bank integration
+\end{itemize}
+
+% ============================================================================
+\section{System Architecture (Detailed)}
+% ============================================================================
+
+\subsection{Backend Architecture}
+
+\subsubsection{Entry Point: main.js}
+\begin{itemize}
+  \item DNS configuration for MongoDB SRV lookups
+  \item Express app initialization
+  \item Middleware setup: CORS, JSON parsing
+  \item Route registration
+  \item Global error handler
+  \item MongoDB connection initiation
+  \item Scheduler startup
+\end{itemize}
+
+\subsubsection{Configuration: config.js}
+Environment variables loaded via dotenv:
+\begin{lstlisting}
+PORT                          - Backend port (default 4000)
+JWT_SECRET                    - JWT signing key
+MONGODB_CONNECTION_STRING     - Mongo URI
+MONGODB_DB_NAME              - Database name (default cpg_disha)
+ADMIN_EMAIL, ADMIN_PASSWORD  - Bootstrap credentials
+ICICI_HMAC_SECRET            - Bank HMAC key
+ICICI_HMAC_ALGO              - Hash algorithm (SHA256)
+ICICI_INITIATE_SALE_URL      - Sale initiation endpoint
+ICICI_STATUS_CHECK_URL       - Status check endpoint
+ICICI_REFUND_URL             - Refund endpoint
+ICICI_SETTLEMENT_URL         - Settlement query endpoint
+ICICI_AUTH_REDIRECT_URL      - Post-sale redirect
+\end{lstlisting}
+
+\subsubsection{Database Layer: db.js}
+Centralized MongoDB accessors:
+\begin{itemize}
+  \item Collection getters with ready-state checking (throws 503 if not ready)
+  \item Specialized query functions (by ID, by email, by role, etc.)
+  \item Transaction-like operations via Promise.all for multi-collection updates
+  \item Index creation on connect
+  \item Bootstrap admin user creation
+\end{itemize}
+
+Key patterns:
+\begin{lstlisting}
+// Getter pattern with ready check
+export function getUsersCollection() {
+  if (!usersCollection) {
+    const error = new Error("MongoDB is not connected yet");
+    error.status = 503;
+    throw error;
+  }
+  return usersCollection;
+}
+
+// Finder pattern
+export async function findUserByEmail(email) {
+  return getUsersCollection().findOne({ email: normalizeEmail(email) });
+}
+
+// Upsert pattern with timestamp
+export async function upsertSettlementHistoryRecord({bankName, settlementDate, updateFields}) {
+  const result = await getSettlementHistoryCollection().findOneAndUpdate(
+    { bankName, settlementDate },
+    {
+      $set: {
+        ...updateFields,
+        bankName, settlementDate,
+        updatedAt: new Date().toISOString()
+      },
+      $setOnInsert: { id: crypto.randomUUID(), createdAt: new Date().toISOString() }
+    },
+    { upsert: true, returnDocument: "after", projection: { _id: 0 } }
+  );
+  return result?.value || result || null;
+}
+\end{lstlisting}
+
+\subsubsection{Authentication: auth.js Middleware}
+\begin{lstlisting}
+export function requireAuth(req, res, next) {
+  const authHeader = req.headers.authorization || "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+  if (!token) {
+    return res.status(401).json({ message: "Missing access token" });
+  }
+  try {
+    req.auth = jwt.verify(token, JWT_SECRET);
+    return next();
+  } catch {
+    return res.status(401).json({ message: "Invalid or expired token" });
+  }
+}
+
+export function requireRole(...allowedRoles) {
+  return (req, res, next) => {
+    if (!req.auth || !allowedRoles.includes(req.auth.role)) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    return next();
+  };
+}
+\end{lstlisting}
+
+\subsection{ICICI Bank Integration}
+
+\subsubsection{Secure Hash Verification}
+The system uses HMAC-SHA256 with sorted field values:
+\begin{lstlisting}
+function buildSecureHashFromSortedValues(packet) {
+  const sortedKeys = Object.keys(packet).sort();
+  const concatenatedValues = sortedKeys.map((key) => String(packet[key] ?? "")).join("");
+  return crypto.createHmac("sha256", ICICI_HMAC_SECRET)
+    .update(concatenatedValues).digest("hex");
+}
+\end{lstlisting}
+
+\subsubsection{Sale Initiation Flow}
+\begin{enumerate}
+  \item Build request packet (amount, currencyCode=356, merchantId, aggregatorID, etc.)
+  \item Compute secureHash from sorted values
+  \item POST to ICICI\_INITIATE\_SALE\_URL
+  \item Verify response secureHash
+  \item Extract tranCtx from response
+  \item Build paymentURL: ICICI\_AUTH\_REDIRECT\_URL?tranCtx=...
+  \item Return to frontend
+\end{enumerate}
+
+\subsubsection{Status Check Flow}
+\begin{enumerate}
+  \item Build packet with merchantTxnNo or tranCtx
+  \item Compute secureHash
+  \item POST to ICICI\_STATUS\_CHECK\_URL
+  \item Parse response (handles both JSON and URL-encoded)
+  \item Verify secureHash (with multiple fallback strategies)
+  \item Extract txnStatus and description
+  \item Return status (success/failed/pending)
+\end{enumerate}
+
+\subsubsection{Refund Flow}
+\begin{enumerate}
+  \item When a duplicate successful payment is detected, create a refund record in the `Refunds` collection containing merchant and student details, original transaction id, amount and `status: "initiated"`
+  \item Persist the refund record and do not call any external refund API automatically; external refund processing (manual or asynchronous worker) is out of scope for the immediate queued action
+  \item The refund record stores request/response packets (when available), responseCode, respDescription and a `hashVerified` flag for later verification
+  \item Update payment records with an alert indicating a queued refund and include refund metadata in history views
+\end{enumerate}
+
+\subsection{Scheduler and Automatic Reconciliation}
+
+\subsubsection{Cron Schedule}
+Runs daily at 00:00 IST (Asia/Kolkata timezone):
+\begin{lstlisting}
+cron.schedule("0 0 * * *", async () => {
+  await executeRecurringTemplates();
+  await retryPendingHashVerifications();
+  await reconcilePendingAndFailedTransactions();
+  await runIciciSettlementSync();
+}, { scheduled: true, timezone: "Asia/Kolkata" });
+\end{lstlisting}
+
+\subsubsection{Recurring Template Execution}
+\begin{enumerate}
+  \item Fetch all active templates with nextExecutionDate <= today
+  \item For each template:
+    \begin{enumerate}
+      \item Verify event still exists
+      \item Calculate new TTL (original duration + today)
+      \item Generate one-time payment requests from entries
+      \item Calculate next execution date
+      \item Update template
+    \end{enumerate}
+\end{enumerate}
+
+\subsubsection{Hash Verification Retry}
+\begin{enumerate}
+  \item Find all pending records with pendingHashVerificationRetry=true
+  \item For each record:
+    \begin{enumerate}
+      \item Call checkIciciSaleStatus
+      \item If hash now verifies: update status (success/failed)
+      \item Update payment request accordingly
+    \end{enumerate}
+\end{enumerate}
+
+\subsubsection{Reconciliation Logic}
+\begin{enumerate}
+  \item Fetch all pending/failed payment records (non-external)
+  \item For each record:
+    \begin{enumerate}
+      \item Check if exceeded retry limit (5 daily checks for pending, 2 days for failed)
+      \item Call checkIciciSaleStatus
+      \item Handle transitions:
+      \begin{itemize}
+        \item pending -> pending: increment check counter
+        \item pending -> failed: max retries exceeded, append alert
+        \item pending -> success: verify duplicate, process refund if needed
+        \item failed -> success: append alert, process duplicate refund
+        \item failed -> failed: continue retrying
+      \end{itemize}
+      \item Update Payment\_Processed and related Payment\_Request
+    \end{enumerate}
+\end{enumerate}
+
+\subsubsection{Duplicate Detection and Refund}
+When a payment transitions to success, the scheduler checks:
+\begin{enumerate}
+  \item Get all successful payments for same event+rollNo
+  \item If count >= 2: newer payment is duplicate
+  \item Check if refund already initiated
+  \item Create a refund record in the `Refunds` collection (do not call external refund APIs automatically) with merchant and student details and `status: "initiated"`
+  \item Append alert to payment record indicating refund queued
+  \item Track refund status (initiated/success/failed) via the Refunds collection
+\end{enumerate}
+
+\subsubsection{Settlement Synchronization}
+Queries ICICI for payment settlement status:
+\begin{enumerate}
+  \item Attempt summary query (SETTLEMENTSUMMARY)
+  \item If success: record total settled amount and transaction count
+  \item If failed: fallback to per-transaction status checks
+  \item For each successful payment from previous IST day:
+    \begin{enumerate}
+      \item Call checkIciciSettlementStatus
+      \item Collect settlement details (settled amount, status, timestamp)
+    \end{enumerate}
+  \item Upsert Settlement\_History record with results
+\end{enumerate}
+
+% ============================================================================
+\section{Database Schema and Collections}
+% ============================================================================
+
+\subsection{Collections and Indexes}
+
+\subsubsection{users}
+\begin{lstlisting}
+{
+  id: UUID (unique),
+  name: string,
+  email: string (unique, normalized lowercase),
+  role: enum [admin, system_head, user],
+  passwordHash: bcrypt hash,
+  roll_no: string (optional, for users),
+  ICICI_merchantId: string (optional, unique sparse),
+  mustChangePassword: boolean,
+  authProvider: string (local),
+  createdBy: string,
+  createdAt: ISO timestamp,
+  updatedAt: ISO timestamp
+}
+
+Indexes:
+  - {id: 1} UNIQUE
+  - {email: 1} UNIQUE
+  - {role: 1}
+  - {ICICI_merchantId: 1} UNIQUE SPARSE
+\end{lstlisting}
+
+\subsubsection{Events}
+\begin{lstlisting}
+{
+  id: UUID (unique),
+  name: string,
+  description: string,
+  createdBySystemHeadId: UUID,
+  createdBySystemHeadName: string,
+  isOngoing: boolean,
+  createdAt: ISO timestamp,
+  updatedAt: ISO timestamp
+}
+
+Indexes:
+  - {id: 1} UNIQUE
+  - {createdBySystemHeadId: 1}
+  - {isOngoing: 1}
+\end{lstlisting}
+
+\subsubsection{One\_Time\_Payment\_Request}
+\begin{lstlisting}
+{
+  id: UUID (unique),
+  batchId: UUID (groups entries of same request),
+  createdBySystemHeadId: UUID,
+  eventId: UUID,
+  type: "one_time",
+  rollNo: string (normalized),
+  bank: string (primary bank),
+  banks: array of strings,
+  amount: decimal,
+  status: enum [pending, success, failed],
+  timeToLive: ISO timestamp,
+  createdAt: ISO timestamp,
+  updatedAt: ISO timestamp
+}
+
+Indexes:
+  - {id: 1} UNIQUE
+  - {eventId: 1, createdBySystemHeadId: 1}
+\end{lstlisting}
+
+\subsubsection{Fixed\_Payment\_Request}
+\begin{lstlisting}
+{
+  id: UUID (unique),
+  createdBySystemHeadId: UUID,
+  eventId: UUID,
+  type: "fixed",
+  bank: string (primary),
+  banks: array of strings,
+  isAmountFixed: boolean,
+  amount: decimal (null if variable),
+  status: enum [pending, success, failed],
+  createdAt: ISO timestamp,
+  updatedAt: ISO timestamp
+}
+
+Indexes:
+  - {id: 1} UNIQUE
+  - {eventId: 1, createdBySystemHeadId: 1}
+\end{lstlisting}
+
+\subsubsection{Recurring\_Templates}
+\begin{lstlisting}
+{
+  id: UUID (unique),
+  eventId: UUID,
+  createdBySystemHeadId: UUID,
+  entries: array of {rollNo, amount},
+  bank: string,
+  banks: array,
+  originalTimeToLive: ISO,
+  originalCreationDate: ISO,
+  intervalValue: number (days/months),
+  intervalUnit: enum [days, months],
+  status: enum [active, inactive],
+  nextExecutionDate: ISO,
+  lastGeneratedAt: ISO (nullable),
+  lastGeneratedPaymentIds: array of UUID,
+  createdAt: ISO,
+  updatedAt: ISO
+}
+
+Indexes:
+  - {id: 1} UNIQUE
+  - {eventId: 1, createdBySystemHeadId: 1}
+  - {status: 1, nextExecutionDate: 1}
+\end{lstlisting}
+
+\subsubsection{Banks}
+\begin{lstlisting}
+{
+  id: UUID (unique),
+  displayName: string,
+  normalizedDisplayName: string (lowercase, unique),
+  enabled: boolean,
+  fields: array of {key: string, value: string},
+  createdBy: UUID,
+  createdAt: ISO,
+  updatedAt: ISO
+}
+
+Indexes:
+  - {id: 1} UNIQUE
+  - {normalizedDisplayName: 1} UNIQUE
+\end{lstlisting}
+
+\subsubsection{Payment\_Processed}
+\begin{lstlisting}
+{
+  id: UUID (unique),
+  status: enum [pending, success, failed],
+  source: enum [internal_link, external_link],
+  createdBySystemHeadId: UUID,
+  externalLinkId: UUID (nullable),
+  paymentRequestId: UUID (nullable),
+  pendingHashVerificationRetry: boolean,
+  student: {
+    userId: UUID (nullable),
+    roll_no: string,
+    name: string,
+    email: string
+  },
+  transaction: {
+    transaction_id: string (merchantTxnNo),
+    merchant_id: string,
+    response_code: string,
+    amount: decimal,
+    date: ISO,
+    status: enum [PENDING, SUCCESSFUL, FAILURE]
+  },
+  bank: {
+    bank_id: UUID,
+    bank_name: string
+  },
+  gateway: {
+    tranCtx: string (nullable),
+    requestPacket: object (ICICI request),
+    responsePacket: object (ICICI response),
+    originalTxnNo: string,
+    statusRequestPacket: object,
+    statusResponsePacket: object,
+    txnRespDescription: string
+  },
+  alerts: array of {id, reason, message, createdAt, read},
+  duplicateRefund: object (refund result if auto-refunded),
+  reconciliation: {
+    pendingStatusChecks: number,
+    failedStatusChecks: number,
+    firstFailedAt: ISO,
+    lastCheckedAt: ISO
+  },
+  createdAt: ISO,
+  updatedAt: ISO
+}
+
+Indexes:
+  - {id: 1} UNIQUE
+  - {paymentRequestId: 1}
+  - {createdBySystemHeadId: 1, source: 1}
+  - {student.userId: 1}
+  - {createdAt: -1}
+  - {status: 1, pendingHashVerificationRetry: 1} SPARSE
+\end{lstlisting}
+
+\subsubsection{External\_Links}
+\begin{lstlisting}
+{
+  id: UUID (unique),
+  createdBySystemHeadId: UUID (unique),
+  status: enum [active, disabled],
+  usageCount: number,
+  lastUsedAt: ISO (nullable),
+  createdAt: ISO,
+  updatedAt: ISO
+}
+
+Indexes:
+  - {id: 1} UNIQUE
+  - {createdBySystemHeadId: 1} UNIQUE
+  - {status: 1}
+\end{lstlisting}
+
+\subsubsection{Refunds}
+\begin{lstlisting}
+{
+  id: UUID (unique),
+  paymentRecordId: UUID,
+  paymentRequestId: UUID (nullable),
+  eventId: UUID,
+  rollNo: string,
+  originalTxnNo: string,
+  refundTxnNo: string (nullable),
+  amount: decimal,
+  status: enum [initiated, success, failed],
+  trigger: enum [duplicate_successful_payment, ...],
+  requestPacket: object (ICICI request),
+  responsePacket: object (ICICI response),
+  responseCode: string (nullable),
+  respDescription: string (nullable),
+  hashVerified: boolean (nullable),
+  createdAt: ISO,
+  updatedAt: ISO
+}
+
+Indexes:
+  - {id: 1} UNIQUE
+  - {paymentRecordId: 1}
+  - {originalTxnNo: 1}
+  - {status: 1, createdAt: -1}
+\end{lstlisting}
+
+\subsubsection{Settlement\_History}
+\begin{lstlisting}
+{
+  id: UUID (unique),
+  bankName: string (normalized uppercase),
+  settlementDate: string (YYYYMMDD),
+  status: enum [success, partial, failed],
+  source: enum [summary, status_fallback],
+  totalSettledAmount: decimal,
+  transactionCount: number,
+  checkedTransactionCount: number (fallback only),
+  payoutDetails: array of {pay_amount, ...},
+  settlementDetails: array of {originalTxnNo, isSettled, ...},
+  responseCode: string (nullable),
+  requestPacket: object,
+  responsePacket: object,
+  notes: string,
+  createdAt: ISO,
+  updatedAt: ISO
+}
+
+Indexes:
+  - {id: 1} UNIQUE
+  - {bankName: 1, settlementDate: 1} UNIQUE
+  - {settlementDate: -1, updatedAt: -1}
+\end{lstlisting}
+
+% ============================================================================
+\section{API Endpoint Reference}
+% ============================================================================
+
+\subsection{Authentication Endpoints}
+
+\subsubsection{POST /auth/login}
+Login with email and password.
+\begin{lstlisting}
+Request: {email, password}
+Response: {token, user: {id, email, name, role, ...}}
+Status: 200 | 401
+\end{lstlisting}
+
+\subsubsection{POST /auth/signup}
+Self-signup (user role only).
+\begin{lstlisting}
+Request: {name, email, password, roll_no, role="user"}
+Response: {token, user: {...}}
+Status: 201 | 400 | 409
+\end{lstlisting}
+
+\subsubsection{POST /auth/change-password}
+Change password (authenticated).
+\begin{lstlisting}
+Request: {currentPassword, newPassword}
+Response: {message: "Password changed successfully"}
+Status: 200 | 400 | 401
+Auth: Required
+\end{lstlisting}
+
+\subsubsection{GET /auth/me}
+Get current user (authenticated).
+\begin{lstlisting}
+Response: {user: {...}}
+Status: 200 | 404
+Auth: Required
+\end{lstlisting}
+
+\subsection{Event Management Endpoints}
+
+\subsubsection{POST /events}
+Create event (system\_head only).
+\begin{lstlisting}
+Request: {name, description}
+Response: {event: {...}}
+Status: 201 | 400
+Auth: system_head role required
+\end{lstlisting}
+
+\subsubsection{GET /events}
+List events for system head.
+\begin{lstlisting}
+Response: {events: [{id, name, description, paymentRequestTypes, ...}]}
+Status: 200
+Auth: system_head role required
+\end{lstlisting}
+
+\subsubsection{GET /events/:eventId}
+Get event detail.
+\begin{lstlisting}
+Response: {event: {...}}
+Status: 200 | 404
+Auth: system_head role required
+\end{lstlisting}
+
+\subsubsection{PATCH /events/:eventId/complete}
+Mark event as complete.
+\begin{lstlisting}
+Response: {event: {..., isOngoing: false}}
+Status: 200 | 404
+Auth: system_head role required
+\end{lstlisting}
+
+\subsubsection{DELETE /events/:eventId}
+Delete event and cascade.
+\begin{lstlisting}
+Response: {message: "Event deleted successfully"}
+Status: 200 | 404
+Auth: system_head role required
+\end{lstlisting}
+
+\subsection{Payment Request Endpoints}
+
+\subsubsection{POST /events/:eventId/payment-requests}
+Create payment request (one-time or fixed).
+\begin{lstlisting}
+Request (one_time): {
+  type: "one_time",
+  entries: [{rollNo, amount}, ...],
+  timeToLive: "ISO date",
+  bank: "ICICI",
+  banks: ["ICICI", ...],
+  isRecurring: false,
+  intervalValue: 7,
+  intervalUnit: "days"
+}
+Request (fixed): {
+  type: "fixed",
+  isAmountFixed: true,
+  amount: 500,
+  bank: "ICICI"
+}
+Response: {paymentRequest, paymentRequests, recurringTemplate, table}
+Status: 201 | 400 | 404 | 409
+Auth: system_head role required
+\end{lstlisting}
+
+\subsubsection{GET /events/:eventId/payment-requests/latest}
+Get latest payment request for event.
+\begin{lstlisting}
+Response: {paymentRequest: {...} | null}
+Status: 200
+Auth: system_head role required
+\end{lstlisting}
+
+\subsubsection{DELETE /events/fixed-payment-requests/:paymentRequestId}
+Delete fixed payment request.
+\begin{lstlisting}
+Response: {message: "Fixed payment request deleted successfully."}
+Status: 200 | 403 | 404
+Auth: system_head role required
+\end{lstlisting}
+
+\subsubsection{DELETE /events/one-time-payment-requests/:paymentRequestId}
+Delete one-time payment request.
+\begin{lstlisting}
+Response: {message: "One-time payment request deleted successfully."}
+Status: 200 | 403 | 404
+Auth: system_head role required
+\end{lstlisting}
+
+\subsection{User Payment Endpoints}
+
+\subsubsection{GET /user-payments/pending}
+List pending payments for user.
+\begin{lstlisting}
+Response: {requests: [{id, amount, timeToLive, eventName, banks, ...}]}
+Status: 200 | 400 | 404
+Auth: user role required
+\end{lstlisting}
+
+\subsubsection{GET /user-payments/optional}
+List fixed optional payments.
+\begin{lstlisting}
+Response: {requests: [{...}]}
+Status: 200
+Auth: user role required
+\end{lstlisting}
+
+\subsubsection{GET /user-payments/history}
+Get payment transaction history.
+\begin{lstlisting}
+Response: {transactions: [{id, status, amount, bank, eventName, ...}]}
+Status: 200
+Auth: user role required
+\end{lstlisting}
+
+\subsubsection{POST /user-payments/initiate-sale}
+Initiate payment with bank.
+\begin{lstlisting}
+Request: {
+  paymentRequestId: "UUID",
+  returnURL: "https://...",
+  bank: "ICICI",
+  customAmount: 500 (optional, for variable requests)
+}
+Response: {
+  paymentURL: "ICICI redirect URL",
+  tranCtx: "context",
+  paymentRecordId: "UUID",
+  status: "pending",
+  ...
+}
+Status: 200 | 400 | 404
+Auth: user role required
+\end{lstlisting}
+
+\subsubsection{POST /user-payments/verify-status}
+Verify payment completion.
+\begin{lstlisting}
+Request: {
+  paymentRecordId: "UUID",
+  paymentRequestId: "UUID (fallback)",
+  originalTxnNo: "tranCtx (optional)"
+}
+Response: {
+  status: "success" | "failed" | "pending",
+  paymentRecord: {...},
+  statusSignal: "...",
+  txnRespDescription: "..."
+}
+Status: 200 | 403 | 404
+Auth: user role required
+\end{lstlisting}
+
+\subsection{External Link Endpoints}
+
+\subsubsection{POST /external-links/me}
+Create/get external link for system head.
+\begin{lstlisting}
+Response: {link: {id, status, usageCount, lastUsedAt}}
+Status: 200
+Auth: system_head role required
+\end{lstlisting}
+
+\subsubsection{POST /external-links/me/payment-url}
+Generate payment URL for amount.
+\begin{lstlisting}
+Request: {amount: 500}
+Response: {linkId, amount, paymentPath: "/pay/external/:linkId?amount=500.00"}
+Status: 200 | 400
+Auth: system_head role required
+\end{lstlisting}
+
+\subsubsection{GET /external-links/:linkId/resolve}
+Resolve external link (public).
+\begin{lstlisting}
+Query: amount=500
+Response: {linkId, amount, systemHead: {id, name, email}, banks: [...]}
+Status: 200 | 400 | 404 | 410
+Auth: None required
+\end{lstlisting}
+
+\subsubsection{POST /external-links/:linkId/initiate}
+Initiate external payment (public).
+\begin{lstlisting}
+Request: {
+  amount: 500,
+  email: "user@example.com",
+  bank: "ICICI",
+  returnURL: "https://..."
+}
+Response: {
+  paymentURL: "...",
+  paymentRecordId: "UUID",
+  status: "pending"
+}
+Status: 200 | 400 | 404 | 410
+Auth: None required
+\end{lstlisting}
+
+\subsubsection{GET /external-links/receipt/:paymentRecordId}
+Get external receipt (public).
+\begin{lstlisting}
+Response: {receipt: {...}}
+Status: 200 | 404 | 409
+Auth: None required
+Note: Only success payments can be receipted
+\end{lstlisting}
+
+\subsubsection{POST /external-links/verify-status}
+Verify external payment status (public).
+\begin{lstlisting}
+Request: {
+  paymentRecordId: "UUID" OR
+  merchantTxnNo: "..." OR
+  tranCtx: "..."
+}
+Response: {status, paymentRecord, statusSignal, txnRespDescription}
+Status: 200 | 404
+Auth: None required
+\end{lstlisting}
+
+\subsubsection{PATCH /external-links/:linkId/status}
+Toggle external link status.
+\begin{lstlisting}
+Request: {status: "active" | "disabled"}
+Response: {link: {...}}
+Status: 200 | 404
+Auth: system_head role required
+\end{lstlisting}
+
+\subsection{Admin Endpoints}
+
+\subsubsection{GET /admin/system-heads}
+List system heads.
+\begin{lstlisting}
+Response: {users: [{id, name, email, role, ...}]}
+Status: 200
+Auth: admin role required
+\end{lstlisting}
+
+\subsubsection{POST /admin/system-heads}
+Create system head.
+\begin{lstlisting}
+Request: {name, email, password}
+Response: {user: {...}}
+Status: 201 | 400 | 409
+Auth: admin role required
+\end{lstlisting}
+
+\subsubsection{GET /admin/banks}
+List banks.
+\begin{lstlisting}
+Response: {banks: [{id, displayName, enabled, fields, ...}]}
+Status: 200
+Auth: admin role required
+\end{lstlisting}
+
+\subsubsection{POST /admin/banks}
+Create bank.
+\begin{lstlisting}
+Request: {fields: [{key, value}, ...]}
+Response: {bank: {...}}
+Status: 201 | 400 | 409
+Auth: admin role required
+\end{lstlisting}
+
+\subsubsection{PATCH /admin/banks/:bankId}
+Update bank.
+\begin{lstlisting}
+Request: {fields: [{key, value}, ...]}
+Response: {bank: {...}}
+Status: 200 | 404 | 409
+Auth: admin role required
+\end{lstlisting}
+
+\subsubsection{PATCH /admin/banks/:bankId/status}
+Toggle bank status.
+\begin{lstlisting}
+Request: {enabled: true | false}
+Response: {bank: {...}}
+Status: 200 | 400 | 404
+Auth: admin role required
+\end{lstlisting}
+
+\subsubsection{DELETE /admin/banks/:bankId}
+Delete bank.
+\begin{lstlisting}
+Response: {message: "Bank deleted successfully"}
+Status: 200 | 404
+Auth: admin role required
+\end{lstlisting}
+
+\subsubsection{GET /admin/system-heads/:systemHeadId/payment-history}
+Get payment history for system head.
+\begin{lstlisting}
+Query: eventId (optional)
+Response: {transactions: [{...}]}
+Status: 200 | 400 | 404
+Auth: admin role required
+\end{lstlisting}
+
+\subsubsection{GET /admin/settlements/icici}
+Get ICICI settlement history.
+\begin{lstlisting}
+Query: limit=30
+Response: {latest, records: [...]}
+Status: 200
+Auth: admin role required
+\end{lstlisting}
+
+\subsubsection{POST /admin/settlements/icici/sync}
+Manual settlement sync.
+\begin{lstlisting}
+Request: {settlementDate: "YYYYMMDD"}
+Response: {mode, record: {...}}
+Status: 200 | 400
+Auth: admin role required
+\end{lstlisting}
+
+% ============================================================================
+\section{Security Specifications}
+% ============================================================================
+
+\subsection{Authentication Security}
+\begin{itemize}
+  \item JWT tokens expire after 15 minutes
+  \item Tokens contain: sub (user ID), role, email
+  \item Authorization header required: ``Bearer <token>''
+  \item Invalid/expired tokens return 401
+  \item Frontend detects 401 and clears local auth state
+\end{itemize}
+
+\subsection{Authorization Security}
+\begin{itemize}
+  \item Role-based middleware enforces access control
+  \item Data ownership checks: system\_head can only access own events
+  \item User can only see payments for their roll number
+  \item Admin can see all data but system\_heads cannot see peer data
+\end{itemize}
+
+\subsection{Password Security}
+\begin{itemize}
+  \item Minimum 8 characters enforced on signup/password-change
+  \item Bcrypt with SALT\_ROUNDS=10 (default from bcryptjs)
+  \item Passwords never logged or returned in API responses
+  \item Password reset not implemented (must change password after first login)
+\end{itemize}
+
+\subsection{Input Validation and Sanitization}
+\begin{itemize}
+  \item Email: normalized (lowercase, trimmed)
+  \item Roll number: uppercase, whitespace removed
+  \item Amounts: parsed as numbers, must be finite and positive
+  \item Dates: ISO format parsing with validation
+  \item Enums: checked against allowed values
+  \item Strings: max length validation on key fields
+  \item Arrays: duplicate checks where necessary
+\end{itemize}
+
+\subsection{ICICI Communication Security}
+\begin{itemize}
+  \item HMAC-SHA256 hash verification on all ICICI responses
+  \item Request packets logged for debugging (production: consider sanitization)
+  \item Response packet verification with multiple fallback strategies
+  \item Merchant credentials secured in Banks collection
+  \item Sensitive fields (HMAC secret, JWT secret) via environment variables
+\end{itemize}
+
+\subsection{Data Protection}
+\begin{itemize}
+  \item MongoDB connection string via environment variable
+  \item ICICI merchant IDs: indexed with sparse unique constraint
+  \item Sensitive fields: passwords, merchant IDs, secrets
+  \item Audit trail: timestamps and createdBy tracking
+\end{itemize}
+
+\subsection{CORS Configuration}
+\begin{itemize}
+  \item CORS middleware enabled
+  \item Accepts requests from frontend origin
+  \item No sensitive headers exposed
+  \item Credentials mode configurable
+\end{itemize}
+
+% ============================================================================
+\section{Error Handling and Recovery}
+% ============================================================================
+
+\subsection{HTTP Status Codes}
+\begin{itemize}
+  \item 200 OK: Successful GET/PATCH
+  \item 201 Created: Successful POST creation
+  \item 400 Bad Request: Validation failure, missing fields
+  \item 401 Unauthorized: Missing or invalid token
+  \item 403 Forbidden: Insufficient permissions
+  \item 404 Not Found: Resource doesn't exist
+  \item 409 Conflict: Duplicate resource, constraint violation
+  \item 410 Gone: Resource disabled (external link)
+  \item 500 Internal Server Error: Unhandled server error
+  \item 502 Bad Gateway: External API failure (ICICI)
+  \item 503 Service Unavailable: Database unavailable
+\end{itemize}
+
+\subsection{Global Error Handler}
+\begin{lstlisting}
+app.use((error, _req, res, _next) => {
+  console.error(error);
+  const status = Number(error?.status) || 500;
+  if (status === 503) {
+    return res.status(503).json({ message: "Database unavailable. Please retry shortly." });
+  }
+  return res.status(500).json({ message: "Internal server error" });
+});
+\end{lstlisting}
+
+\subsection{Database Connection Retry}
+\begin{itemize}
+  \item Automatic retry with exponential backoff
+  \item Initial delay: 3 seconds, capped at 30 seconds
+  \item Attempts logged with timestamps
+  \item Server continues to listen while connecting
+\end{itemize}
+
+\subsection{Hash Verification Fallback}
+ICICI response verification attempts multiple strategies:
+\begin{enumerate}
+  \item Sorted alphabetically (standard method)
+  \item Sorted with falsy values skipped
+  \item Insertion order (in case ICICI uses response order)
+\end{enumerate}
+
+\subsection{Settlement Sync Fallback}
+If settlement summary fails:
+\begin{enumerate}
+  \item Falls back to per-transaction status checks
+  \item Processes all successful payments from previous day
+  \item Records partial settlement status
+  \item Continues scheduler on failure
+\end{enumerate}
+
+% ============================================================================
+\section{Deployment and Operations}
+% ============================================================================
+
+\subsection{Environment Setup}
+
+Required environment variables in `backend/.env`:
+\begin{lstlisting}
+# Server
+PORT=4000
+NODE_ENV=production
+
+# Database
+MONGODB_CONNECTION_STRING=mongodb+srv://...
+MONGODB_DB_NAME=cpg_disha
+
+# Authentication
+JWT_SECRET=<secure-random-string>
+
+# Admin bootstrap
+ADMIN_EMAIL=admin@iith.ac.in
+ADMIN_PASSWORD=<secure-password>
+
+# ICICI Integration
+ICICI_HMAC_SECRET=<provided-by-icici>
+ICICI_HMAC_ALGO=sha256
+ICICI_INITIATE_SALE_URL=https://icici.endpoint/sale
+ICICI_STATUS_CHECK_URL=https://icici.endpoint/status
+ICICI_REFUND_URL=https://icici.endpoint/refund
+ICICI_SETTLEMENT_URL=https://icici.endpoint/settlement
+ICICI_AUTH_REDIRECT_URL=https://icici.endpoint/auth
+
+# Frontend (optional, for proxying)
+VITE_API_BASE_URL=http://localhost:4000
+\end{lstlisting}
+
+\subsection{Startup Sequence}
+\begin{enumerate}
+  \item Backend server starts on configured PORT
+  \item MongoDB connection attempt with retries
+  \item Admin user bootstrap (if not exists)
+  \item Scheduler initialization (cron job registered, not yet running)
+  \item Server ready to accept requests
+\end{enumerate}
+
+\subsection{Database Indexes}
+Automatically created on connection. Critical indexes for performance:
+\begin{itemize}
+  \item users: email (unique), role, id (unique)
+  \item Events: id (unique), createdBySystemHeadId, isOngoing
+  \item Payment requests: id (unique), eventId+createdBySystemHeadId
+  \item Payment\_Processed: id, paymentRequestId, createdBySystemHeadId+source, createdAt
+  \item Settlement\_History: bankName+settlementDate (unique), settlementDate desc
+\end{itemize}
+
+\subsection{Monitoring Points}
+\begin{itemize}
+  \item GET /health endpoint for liveness checks
+  \item Console logs for payment events (app logs should be captured)
+  \item Scheduler execution logs (daily at 00:00 IST)
+  \item ICICI integration logs (request/response packets)
+  \item Database connection logs (retries, errors)
+\end{itemize}
+
+\subsection{Backup and Disaster Recovery}
+\begin{itemize}
+  \item MongoDB backups: implement via Atlas snapshots or mongodump
+  \item Payment records: immutable once created, append-only updates
+  \item Settlement records: historical tracking of all syncs
+  \item Refund records: full audit trail maintained
+\end{itemize}
+
+% ============================================================================
+\section{Testing Strategy and Verification}
+% ============================================================================
+
+\subsection{Unit Tests (Recommended)}
+\begin{itemize}
+  \item `utils.js`: normalizeEmail, normalizeRollNo, signToken verification
+  \item `db.js`: mock MongoDB calls, test finder logic
+  \item `bank-payment/icici.js`: HMAC hash generation and verification
+  \item `scheduler.js`: reconciliation state machine transitions
+\end{itemize}
+
+\subsection{Integration Tests (Recommended)}
+\begin{itemize}
+  \item Auth flow: signup -> login -> protected endpoint
+  \item Event workflow: create -> add payments -> mark complete -> delete
+  \item Payment workflow: create request -> initiate sale -> verify status
+  \item External links: create -> resolve -> initiate -> verify -> receipt
+  \item Scheduler: template execution, hash verification retry, reconciliation
+\end{itemize}
+
+\subsection{Manual Testing (Current Approach)}
+\begin{itemize}
+  \item API testing via Postman/curl
+  \item Frontend user flows via browser
+  \item ICICI integration via test merchant account
+  \item Database verification via MongoDB CLI
+  \item Scheduler behavior observation via logs
+\end{itemize}
+
+\subsection{Performance Testing (Recommended)}
+\begin{itemize}
+  \item Load test: concurrent payment initiations
+  \item Database query performance: verify indexes work
+  \item ICICI API latency: typical 2-5 second response time
+  \item Scheduler execution time: should complete < 5 minutes
+\end{itemize}
+
+\subsection{Security Testing (Recommended)}
+\begin{itemize}
+  \item OWASP Top 10 scanning
+  \item SQL injection prevention (MongoDB not vulnerable, but validate inputs)
+  \item XSS prevention (React escapes by default)
+  \item CSRF tokens (stateless JWT, no forms)
+  \item Password policy enforcement
+  \item API endpoint access control verification
+\end{itemize}
+
+% ============================================================================
+\section{Conclusion and Future Enhancements}
+% ============================================================================
+
+\subsection{Current State}
+CPG\_DISHA is a fully functional payment management system with:
+\begin{itemize}
+  \item Complete event and payment request workflow
+  \item ICICI bank integration with secure communication
+  \item Automated reconciliation and settlement tracking
+  \item External payment links for public users
+  \item Comprehensive role-based access control
+\end{itemize}
+
+\subsection{Recommended Enhancements}
+\begin{enumerate}
+  \item \textbf{Automated Testing}: Implement unit and integration test suites
+  \item \textbf{Structured Logging}: Switch to Winston or Bunyan for production logging
+  \item \textbf{API Documentation}: OpenAPI/Swagger spec generation
+  \item \textbf{Additional Banks}: Extend integration to SBI, HDFC, other banks
+  \item \textbf{Refund Dashboard}: UI for tracking refund statuses
+  \item \textbf{Analytics}: Payment trends, settlement reporting
+  \item \textbf{Webhooks}: Bank status change notifications
+  \item \textbf{2FA}: Two-factor authentication for system heads/admin
+  \item \textbf{Audit Logs}: Detailed action tracking for compliance
+  \item \textbf{Rate Limiting}: Prevent abuse of payment endpoints
+\end{enumerate}
+
+\subsection{Support and Maintenance}
+\begin{itemize}
+  \item Review logs daily for errors and reconciliation issues
+  \item Monitor ICICI settlement status weekly
+  \item Update environment variables securely
+  \item Perform database backups regularly
+  \item Test disaster recovery procedures
+\end{itemize}
+
+\newpage
+\appendix
+
+\section{Code Snippets}
+\label{appendix:snippets}
+
+\subsection{JWT Token Generation}
+\begin{lstlisting}
+// backend/utils.js
+export function signToken(user) {
+  return jwt.sign(
+    {
+      sub: user.id,
+      role: user.role,
+      email: user.email,
+    },
+    JWT_SECRET,
+    { expiresIn: "15m" }
+  );
+}
+\end{lstlisting}
+
+\subsection{ICICI Secure Hash}
+\begin{lstlisting}
+// backend/routes/bank-payment/icici.js
+function buildSecureHashFromSortedValues(packet) {
+  const sortedKeys = Object.keys(packet).sort();
+  const concatenatedValues = sortedKeys.map((key) => String(packet[key] ?? "")).join("");
+  return crypto
+    .createHmac(ICICI_HMAC_ALGO || "sha256", ICICI_HMAC_SECRET)
+    .update(concatenatedValues)
+    .digest("hex");
+}
+\end{lstlisting}
+
+\subsection{Scheduler Cron Setup}
+\begin{lstlisting}
+// backend/scheduler.js
+export function startRecurringTemplatesScheduler() {
+  const task = cron.schedule("0 0 * * *", async () => {
+    console.log(`[Scheduler] Cron job triggered at ${new Date().toISOString()}`);
+    await executeRecurringTemplates();
+    await retryPendingHashVerifications();
+    await reconcilePendingAndFailedTransactions();
+    await runIciciSettlementSync();
+  }, {
+    scheduled: true,
+    timezone: "Asia/Kolkata",
+  });
+  console.log("[Scheduler] Recurring templates scheduler started");
+  return task;
+}
+\end{lstlisting}
+
+\subsection{API Request Handler}
+\begin{lstlisting}
+// frontend/src/lib/api.js
+export async function apiRequest(path, options = {}, token) {
+  const headers = {
+    "Content-Type": "application/json",
+    ...(options.headers || {}),
+  };
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    headers,
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    if (response.status === 401 && token && typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent(AUTH_EXPIRED_EVENT, {
+          detail: { path, message: payload.message || "Invalid or expired token" }
+        })
+      );
+    }
+    throw new Error(payload.message || "Request failed");
+  }
+  return payload;
+}
+\end{lstlisting}
+
+\end{document}

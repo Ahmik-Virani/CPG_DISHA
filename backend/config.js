@@ -16,6 +16,8 @@ export const SALT_ROUNDS = 10;
 export const PAYMENT_BANKS = ["ICICI", "SBI", "HDFC"];
 export const ICICI_HMAC_SECRET = String(process.env.ICICI_HMAC_SECRET).trim();
 export const ICICI_HMAC_ALGO = String(process.env.ICICI_HMAC_ALGO).trim();
+export const ICICI_HMAC_SECRET_RESPONSE = String(process.env.ICICI_HMAC_SECRET_RESPONSE || "").trim();
+
 export const ICICI_INITIATE_SALE_URL = String(process.env.ICICI_INITIATE_SALE_URL).trim();
 export const ICICI_STATUS_CHECK_URL = String(process.env.ICICI_STATUS_CHECK_URL).trim();
 export const ICICI_AUTH_REDIRECT_URL = String(process.env.ICICI_AUTH_REDIRECT_URL).trim();
